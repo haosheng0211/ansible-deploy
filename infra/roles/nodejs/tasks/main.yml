@@ -19,10 +19,11 @@
     name: nodejs
     state: present
 
-- name: Install Yarn via corepack
-  command: corepack enable yarn
-  args:
-    creates: /usr/lib/node_modules/corepack/dist/yarn.js
+- name: Install Yarn globally
+  npm:
+    name: yarn
+    global: true
+    state: present
 
 - name: Install PM2 globally
   npm:

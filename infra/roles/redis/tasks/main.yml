@@ -8,6 +8,13 @@
     name: redis-server
     state: present
 
+- name: Fix default bind in redis.conf (remove IPv6)
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^bind "
+    line: "bind 127.0.0.1"
+  notify: restart redis
+
 - name: Deploy Redis custom config
   template:
     src: redis-custom.conf.j2

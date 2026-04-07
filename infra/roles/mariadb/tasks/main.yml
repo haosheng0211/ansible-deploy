@@ -17,8 +17,8 @@
 - name: Install MariaDB server
   apt:
     name:
-      - "mariadb-server={{ mariadb_version }}.*"
-      - "mariadb-client={{ mariadb_version }}.*"
+      - mariadb-server
+      - mariadb-client
       - python3-mysqldb
     state: present
 

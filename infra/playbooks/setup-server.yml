@@ -11,6 +11,9 @@
   hosts: production
   become: true
 
+  vars_files:
+    - ../group_vars/production.yml
+
   roles:
     - common
     - ufw
