@@ -22,4 +22,5 @@
     - redis
     - supervisor
     - node-exporter
-    - promtail
+    - role: promtail
+      when: promtail_enabled | default(false)

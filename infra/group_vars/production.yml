@@ -35,6 +35,7 @@ redis_maxmemory_policy: allkeys-lru
 # Node Exporter
 node_exporter_version: "1.8.2"
 
-# Promtail + Loki
+# Promtail + Loki (設為 false 可跳過安裝)
+promtail_enabled: false
 promtail_version: "3.1.0"
-loki_push_url: "http://LOKI_HOST:3100/loki/api/v1/push"   # 填入共用 ECS 的 Loki 地址
+loki_push_url: ""   # 填入共用 ECS 的 Loki 地址，例如 http://10.0.0.x:3100/loki/api/v1/push
