@@ -1,0 +1,15 @@
+---
+# =============================================================================
+# supervisor — Install only (worker config is in project role)
+# =============================================================================
+
+- name: Install Supervisor
+  apt:
+    name: supervisor
+    state: present
+
+- name: Ensure Supervisor is running
+  systemd:
+    name: supervisor
+    state: started
+    enabled: true

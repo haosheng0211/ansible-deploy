@@ -1,0 +1,40 @@
+# =============================================================================
+# Server-level variables (shared by all projects on this server)
+# =============================================================================
+
+# Server
+deploy_user: deploy
+deploy_group: deploy
+deploy_ssh_public_key: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
+timezone: Asia/Taipei
+
+# Firewall — SSH allowed IPs (leave empty to allow all)
+ssh_allowed_ips: []
+#  - 1.2.3.4
+
+# Firewall — Allow Prometheus to scrape Node Exporter :9100
+monitoring_allowed_ips: []
+#  - 10.0.0.x    # 共用 ECS 內網 IP
+
+# PHP
+php_version: "8.2"
+
+# MariaDB
+mariadb_version: "10.11"
+mariadb_root_password: "CHANGE_ME_root"
+mariadb_innodb_buffer_pool_size: 256M    # 2C4G 機器建議 256M，4C8G 可調到 1G
+mariadb_max_connections: 100
+
+# Node.js
+nodejs_major_version: "22"
+
+# Redis
+redis_maxmemory: 256mb
+redis_maxmemory_policy: allkeys-lru
+
+# Node Exporter
+node_exporter_version: "1.8.2"
+
+# Promtail + Loki
+promtail_version: "3.1.0"
+loki_push_url: "http://LOKI_HOST:3100/loki/api/v1/push"   # 填入共用 ECS 的 Loki 地址

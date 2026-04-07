@@ -1,0 +1,215 @@
+---
+# =============================================================================
+# common — Base system setup
+# =============================================================================
+
+- name: Update apt cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  apt:
+    upgrade: safe
+
+- name: Install base packages
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - unzip
+      - htop
+      - acl
+      - software-properties-common
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - ntp
+      - logrotate
+    state: present
+
+- name: Set timezone
+  timezone:
+    name: "{{ timezone }}"
+
+- name: Ensure NTP is running
+  systemd:
+    name: ntp
+    state: started
+    enabled: true
+
+# -----------------------------------------------------------------------------
+# Deploy user
+# -----------------------------------------------------------------------------
+- name: Create deploy group
+  group:
+    name: "{{ deploy_group }}"
+    state: present
+
+- name: Create deploy user
+  user:
+    name: "{{ deploy_user }}"
+    group: "{{ deploy_group }}"
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Add SSH authorized key for deploy user
+  authorized_key:
+    user: "{{ deploy_user }}"
+    key: "{{ deploy_ssh_public_key }}"
+    state: present
+
+- name: Allow deploy user limited sudo without password
+  copy:
+    dest: "/etc/sudoers.d/{{ deploy_user }}"
+    content: |
+      {{ deploy_user }} ALL=(ALL) NOPASSWD: /usr/sbin/service php{{ php_version }}-fpm reload, /usr/bin/supervisorctl *
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+# -----------------------------------------------------------------------------
+# SSH hardening
+# -----------------------------------------------------------------------------
+- name: Disable root login via SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitRootLogin"
+    line: "PermitRootLogin no"
+  notify: restart sshd
+
+- name: Disable password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PasswordAuthentication"
+    line: "PasswordAuthentication no"
+  notify: restart sshd
+
+- name: Disable empty passwords
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PermitEmptyPasswords"
+    line: "PermitEmptyPasswords no"
+  notify: restart sshd
+
+- name: Set SSH max auth tries
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?MaxAuthTries"
+    line: "MaxAuthTries 3"
+  notify: restart sshd
+
+- name: Disable X11 forwarding
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?X11Forwarding"
+    line: "X11Forwarding no"
+  notify: restart sshd
+
+- name: Set SSH idle timeout (5 min)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?ClientAliveInterval"
+    line: "ClientAliveInterval 300"
+  notify: restart sshd
+
+- name: Set SSH idle timeout max count
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?ClientAliveCountMax"
+    line: "ClientAliveCountMax 2"
+  notify: restart sshd
+
+- name: Restrict SSH to deploy user only
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?AllowUsers"
+    line: "AllowUsers {{ deploy_user }}"
+  notify: restart sshd
+
+# -----------------------------------------------------------------------------
+# Kernel security (sysctl)
+# -----------------------------------------------------------------------------
+- name: Harden kernel network parameters
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    # Prevent IP spoofing
+    - { key: "net.ipv4.conf.all.rp_filter", value: "1" }
+    - { key: "net.ipv4.conf.default.rp_filter", value: "1" }
+    # Ignore ICMP redirects
+    - { key: "net.ipv4.conf.all.accept_redirects", value: "0" }
+    - { key: "net.ipv4.conf.default.accept_redirects", value: "0" }
+    - { key: "net.ipv6.conf.all.accept_redirects", value: "0" }
+    # Don't send ICMP redirects
+    - { key: "net.ipv4.conf.all.send_redirects", value: "0" }
+    - { key: "net.ipv4.conf.default.send_redirects", value: "0" }
+    # Ignore source-routed packets
+    - { key: "net.ipv4.conf.all.accept_source_route", value: "0" }
+    - { key: "net.ipv6.conf.all.accept_source_route", value: "0" }
+    # SYN flood protection
+    - { key: "net.ipv4.tcp_syncookies", value: "1" }
+    - { key: "net.ipv4.tcp_max_syn_backlog", value: "2048" }
+    # Log suspicious packets
+    - { key: "net.ipv4.conf.all.log_martians", value: "1" }
+    - { key: "net.ipv4.conf.default.log_martians", value: "1" }
+    # Ignore ICMP broadcast
+    - { key: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
+    # Disable IPv6 if not needed
+    - { key: "net.ipv6.conf.all.disable_ipv6", value: "1" }
+    - { key: "net.ipv6.conf.default.disable_ipv6", value: "1" }
+
+# -----------------------------------------------------------------------------
+# File permissions
+# -----------------------------------------------------------------------------
+- name: Restrict cron access to root
+  file:
+    path: "{{ item }}"
+    state: touch
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - /etc/cron.allow
+    - /etc/at.allow
+
+- name: Ensure deploy user is in cron.allow
+  lineinfile:
+    path: /etc/cron.allow
+    line: "{{ deploy_user }}"
+
+- name: Ensure root is in cron.allow
+  lineinfile:
+    path: /etc/cron.allow
+    line: root
+
+# -----------------------------------------------------------------------------
+# Unattended upgrades
+# -----------------------------------------------------------------------------
+- name: Install unattended-upgrades
+  apt:
+    name: unattended-upgrades
+    state: present
+
+- name: Enable unattended-upgrades
+  copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      APT::Periodic::AutocleanInterval "7";
+    mode: "0644"
+
+# -----------------------------------------------------------------------------
+# Shared memory security
+# -----------------------------------------------------------------------------
+- name: Secure shared memory
+  lineinfile:
+    path: /etc/fstab
+    regexp: "tmpfs.*/run/shm"
+    line: "tmpfs /run/shm tmpfs defaults,noexec,nosuid 0 0"

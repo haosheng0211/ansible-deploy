@@ -1,0 +1,60 @@
+---
+# =============================================================================
+# ufw — Firewall
+# =============================================================================
+
+- name: Install UFW
+  apt:
+    name: ufw
+    state: present
+
+- name: Set default incoming policy to deny
+  ufw:
+    direction: incoming
+    policy: deny
+
+- name: Set default outgoing policy to allow
+  ufw:
+    direction: outgoing
+    policy: allow
+
+- name: Allow SSH from specific IPs
+  ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+    from_ip: "{{ item }}"
+  loop: "{{ ssh_allowed_ips }}"
+  when: ssh_allowed_ips | length > 0
+
+- name: Allow SSH from anywhere (fallback if no IPs specified)
+  ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+  when: ssh_allowed_ips | length == 0
+
+- name: Allow HTTP
+  ufw:
+    rule: allow
+    port: "80"
+    proto: tcp
+
+- name: Allow HTTPS
+  ufw:
+    rule: allow
+    port: "443"
+    proto: tcp
+
+- name: Allow Node Exporter from monitoring server
+  ufw:
+    rule: allow
+    port: "9100"
+    proto: tcp
+    from_ip: "{{ item }}"
+  loop: "{{ monitoring_allowed_ips | default([]) }}"
+  when: monitoring_allowed_ips is defined and monitoring_allowed_ips | length > 0
+
+- name: Enable UFW
+  ufw:
+    state: enabled

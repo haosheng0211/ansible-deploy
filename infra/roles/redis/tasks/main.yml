@@ -1,0 +1,31 @@
+---
+# =============================================================================
+# redis — Local Redis server
+# =============================================================================
+
+- name: Install Redis
+  apt:
+    name: redis-server
+    state: present
+
+- name: Deploy Redis custom config
+  template:
+    src: redis-custom.conf.j2
+    dest: /etc/redis/redis-custom.conf
+    mode: "0640"
+    owner: redis
+    group: redis
+  notify: restart redis
+
+- name: Include custom config from main redis.conf
+  lineinfile:
+    path: /etc/redis/redis.conf
+    line: "include /etc/redis/redis-custom.conf"
+    insertafter: EOF
+  notify: restart redis
+
+- name: Ensure Redis is running
+  systemd:
+    name: redis-server
+    state: started
+    enabled: true

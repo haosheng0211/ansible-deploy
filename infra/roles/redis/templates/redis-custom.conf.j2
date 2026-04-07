@@ -1,0 +1,24 @@
+# --- Network ---
+bind 127.0.0.1 ::1
+protected-mode yes
+tcp-keepalive 300
+timeout 300
+
+# --- Memory ---
+maxmemory {{ redis_maxmemory }}
+maxmemory-policy {{ redis_maxmemory_policy }}
+
+# --- Persistence (AOF for queue reliability) ---
+appendonly yes
+appendfsync everysec
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+
+# --- Security (disable dangerous commands in production) ---
+rename-command FLUSHDB ""
+rename-command FLUSHALL ""
+rename-command KEYS ""
+rename-command DEBUG ""
+
+# --- Logging ---
+loglevel notice

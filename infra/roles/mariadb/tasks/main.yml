@@ -1,0 +1,76 @@
+---
+# =============================================================================
+# mariadb — Install + secure (DB/user creation is in project role)
+# =============================================================================
+
+- name: Add MariaDB signing key
+  apt_key:
+    url: "https://mariadb.org/mariadb_release_signing_key.pgp"
+    state: present
+
+- name: Add MariaDB {{ mariadb_version }} repository
+  apt_repository:
+    repo: "deb https://mirror.mariadb.org/repo/{{ mariadb_version }}/ubuntu {{ ansible_distribution_release }} main"
+    state: present
+    update_cache: true
+
+- name: Install MariaDB server
+  apt:
+    name:
+      - "mariadb-server={{ mariadb_version }}.*"
+      - "mariadb-client={{ mariadb_version }}.*"
+      - python3-mysqldb
+    state: present
+
+- name: Ensure MariaDB is running
+  systemd:
+    name: mariadb
+    state: started
+    enabled: true
+
+# -----------------------------------------------------------------------------
+# Security hardening (equivalent to mysql_secure_installation)
+# -----------------------------------------------------------------------------
+- name: Set MariaDB root password
+  mysql_user:
+    name: root
+    host: localhost
+    password: "{{ mariadb_root_password }}"
+    login_unix_socket: /run/mysqld/mysqld.sock
+    state: present
+
+- name: Deploy MariaDB root credentials file
+  template:
+    src: my.cnf.j2
+    dest: /root/.my.cnf
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Remove anonymous users
+  mysql_user:
+    name: ""
+    host_all: true
+    state: absent
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Remove remote root access
+  mysql_query:
+    query: "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')"
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+- name: Remove test database
+  mysql_db:
+    name: test
+    state: absent
+    login_unix_socket: /run/mysqld/mysqld.sock
+
+# -----------------------------------------------------------------------------
+# Server config
+# -----------------------------------------------------------------------------
+- name: Deploy MariaDB server config
+  template:
+    src: mariadb-server.cnf.j2
+    dest: /etc/mysql/mariadb.conf.d/99-custom.cnf
+    mode: "0644"
+  notify: restart mariadb

@@ -1,0 +1,25 @@
+---
+# =============================================================================
+# setup-server.yml — Base server provisioning (run once per new ECS)
+#
+# Installs all software, hardens the system. No project-specific config.
+#
+# Usage:
+#   ansible-playbook playbooks/setup-server.yml -i inventory/production.ini
+# =============================================================================
+- name: Setup production server
+  hosts: production
+  become: true
+
+  roles:
+    - common
+    - ufw
+    - fail2ban
+    - nginx
+    - php
+    - nodejs
+    - mariadb
+    - redis
+    - supervisor
+    - node-exporter
+    - promtail
