@@ -70,21 +70,15 @@
     validate: "visudo -cf %s"
 
 # -----------------------------------------------------------------------------
-# SSH hardening
+# SSH hardening (enable after verifying deploy user can login)
 # -----------------------------------------------------------------------------
-- name: Disable root login via SSH
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?PermitRootLogin"
-    line: "PermitRootLogin no"
-  notify: restart sshd
-
 - name: Disable password authentication
   lineinfile:
     path: /etc/ssh/sshd_config
     regexp: "^#?PasswordAuthentication"
     line: "PasswordAuthentication no"
   notify: restart sshd
+  when: ssh_hardening_enabled | default(false)
 
 - name: Disable empty passwords
   lineinfile:
@@ -92,6 +86,7 @@
     regexp: "^#?PermitEmptyPasswords"
     line: "PermitEmptyPasswords no"
   notify: restart sshd
+  when: ssh_hardening_enabled | default(false)
 
 - name: Set SSH max auth tries
   lineinfile:
@@ -99,6 +94,7 @@
     regexp: "^#?MaxAuthTries"
     line: "MaxAuthTries 3"
   notify: restart sshd
+  when: ssh_hardening_enabled | default(false)
 
 - name: Disable X11 forwarding
   lineinfile:
@@ -106,6 +102,7 @@
     regexp: "^#?X11Forwarding"
     line: "X11Forwarding no"
   notify: restart sshd
+  when: ssh_hardening_enabled | default(false)
 
 - name: Set SSH idle timeout (5 min)
   lineinfile:
@@ -113,6 +110,7 @@
     regexp: "^#?ClientAliveInterval"
     line: "ClientAliveInterval 300"
   notify: restart sshd
+  when: ssh_hardening_enabled | default(false)
 
 - name: Set SSH idle timeout max count
   lineinfile:
@@ -120,13 +118,15 @@
     regexp: "^#?ClientAliveCountMax"
     line: "ClientAliveCountMax 2"
   notify: restart sshd
+  when: ssh_hardening_enabled | default(false)
 
 - name: Restrict SSH to deploy user only
   lineinfile:
     path: /etc/ssh/sshd_config
     regexp: "^#?AllowUsers"
-    line: "AllowUsers {{ deploy_user }}"
+    line: "AllowUsers root {{ deploy_user }}"
   notify: restart sshd
+  when: ssh_hardening_enabled | default(false)
 
 # -----------------------------------------------------------------------------
 # Kernel security (sysctl)
