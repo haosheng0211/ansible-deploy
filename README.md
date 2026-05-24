@@ -57,16 +57,22 @@ ssh root@<your-server-ip>
 
 ### Step 2. 安裝 Ansible 與 git
 
+> ⚠️ **不要直接 `apt install ansible`** — Ubuntu 20.04 預設 repo 給的是 Ansible 2.9.6（2020 年版），沒有 collection 機制，跑這個 playbook 會在 `mysql_query` 那步爆掉。改用官方 PPA 裝最新版。
+
 ```bash
 apt update
-apt install -y ansible git
+apt install -y software-properties-common git
+apt-add-repository --yes --update ppa:ansible/ansible
+apt install -y ansible
 ```
 
 確認版本：
 
 ```bash
-ansible --version    # 需要 2.14+
+ansible --version    # 需要 2.14+，PPA 通常給 2.16+
 ```
+
+> Ubuntu 22.04 / 24.04 預設 repo 的 ansible 已經夠新（2.14 / 2.16），可以省略 PPA 那兩行直接 `apt install -y ansible git`。但加 PPA 不會出錯，當 fallback 也行。
 
 ### Step 3. 把這個 repo 放到機器上
 
