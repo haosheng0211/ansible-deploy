@@ -1,8 +1,11 @@
 ; OPcache — Production settings
+; zend_extension 這行不可省略：少了它 opcache.enable=1 不會真的載入擴充套件，
+; 會導致每個請求都重新編譯全部程式碼（2026-07-05 曾造成正式環境 API 慢 3~5 秒的事故）。
+zend_extension=opcache.so
 opcache.enable=1
-opcache.memory_consumption=128
-opcache.interned_strings_buffer=16
-opcache.max_accelerated_files=10000
+opcache.memory_consumption=256
+opcache.interned_strings_buffer=24
+opcache.max_accelerated_files=20000
 opcache.validate_timestamps=0
 opcache.save_comments=1
 opcache.enable_cli=0
