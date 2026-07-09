@@ -25,7 +25,7 @@ infra/
     ├── ufw            # 防火牆 (22/80/443/9100)
     ├── fail2ban       # SSH 暴力破解防護
     ├── nginx          # Nginx + 優化過的 nginx.conf
-    ├── php            # PHP-FPM 8.2 + 常用擴充 + Composer
+    ├── php            # PHP-FPM 8.2 + 常用擴充 + Composer + cachetool
     ├── nodejs         # Node.js 22 (透過 NodeSource)
     ├── mariadb        # MariaDB 10.11 + 安全設定
     ├── redis          # Redis (bind 127.0.0.1)
@@ -202,7 +202,7 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags promta
 | 防火牆 | UFW 啟用，只開 22/80/443/9100 |
 | SSH | 加固後僅允許金鑰登入 |
 | Nginx | 已裝，預設站點已移除（等專案 role 加 site） |
-| PHP | `php8.2-fpm` 已起，Composer 在 `/usr/local/bin/composer` |
+| PHP | `php8.2-fpm` 已起，Composer 在 `/usr/local/bin/composer`，cachetool 在 `/usr/local/bin/cachetool` |
 | Node.js | `node`、`npm` 已裝 |
 | MariaDB | 已裝、root 密碼已設、移除匿名/test/遠端 root |
 | Redis | bind 127.0.0.1，maxmemory 256mb、LRU |

@@ -71,3 +71,13 @@
     path: /tmp/composer-setup.php
     state: absent
   when: not composer_bin.stat.exists
+
+# -----------------------------------------------------------------------------
+# cachetool — CLI 清除 FPM OPcache（部署後執行 opcache:reset --fcgi=<socket>）
+# -----------------------------------------------------------------------------
+- name: Install cachetool phar
+  get_url:
+    url: "https://github.com/gordalina/cachetool/releases/download/{{ cachetool_version }}/cachetool.phar"
+    dest: /usr/local/bin/cachetool
+    mode: "0755"
+    force: false

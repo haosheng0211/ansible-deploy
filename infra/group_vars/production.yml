@@ -21,6 +21,7 @@ monitoring_allowed_ips: []
 
 # PHP
 php_version: "8.2"
+cachetool_version: "9.0.0"    # CLI 清除 FPM OPcache（gordalina/cachetool）
 
 # MariaDB
 mariadb_version: "10.11"
