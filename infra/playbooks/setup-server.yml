@@ -14,6 +14,25 @@
   vars_files:
     - ../group_vars/production.yml
 
+  pre_tasks:
+    - name: Refuse the default MariaDB root password
+      ansible.builtin.assert:
+        that:
+          - mariadb_root_password is defined
+          - mariadb_root_password | string != 'CHANGE_ME'
+        fail_msg: >-
+          mariadb_root_password is still set to the default value.
+          Set a unique password or provide the variable through Ansible Vault
+          before running this playbook.
+
+    - name: Require a Loki endpoint when Alloy is enabled
+      ansible.builtin.assert:
+        that:
+          - loki_push_url is defined
+          - loki_push_url | string | length > 0
+        fail_msg: Set loki_push_url before enabling Alloy.
+      when: alloy_enabled | default(false) | bool
+
   roles:
     - common
     - ufw
@@ -25,5 +44,5 @@
     - redis
     - supervisor
     - node-exporter
-    - role: promtail
-      when: promtail_enabled | default(false)
+    - role: alloy
+      when: alloy_enabled | default(false) | bool

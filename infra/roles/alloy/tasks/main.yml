@@ -1,0 +1,68 @@
+---
+# =============================================================================
+# alloy — Grafana Alloy log collector for Loki
+# =============================================================================
+
+- name: Stop legacy Promtail service if present
+  ansible.builtin.systemd:
+    name: promtail
+    state: stopped
+    enabled: false
+  failed_when: false
+  changed_when: false
+
+- name: Ensure APT keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download Grafana repository signing key
+  ansible.builtin.get_url:
+    url: https://apt.grafana.com/gpg-full.key
+    dest: /etc/apt/keyrings/grafana.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Add Grafana APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main"
+    state: present
+    update_cache: true
+
+- name: Install Grafana Alloy
+  ansible.builtin.apt:
+    name: alloy
+    state: present
+
+- name: Add Alloy user to adm group
+  ansible.builtin.user:
+    name: alloy
+    groups: adm
+    append: true
+
+- name: Ensure Alloy data directory exists
+  ansible.builtin.file:
+    path: /var/lib/alloy
+    state: directory
+    owner: alloy
+    group: alloy
+    mode: "0750"
+
+- name: Deploy Alloy configuration
+  ansible.builtin.template:
+    src: config.alloy.j2
+    dest: /etc/alloy/config.alloy
+    owner: root
+    group: alloy
+    mode: "0640"
+  notify: restart alloy
+
+- name: Ensure Alloy is running
+  ansible.builtin.systemd:
+    name: alloy
+    state: started
+    enabled: true

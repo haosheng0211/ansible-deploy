@@ -40,20 +40,46 @@
     enabled: true
 
 # -----------------------------------------------------------------------------
-# Deploy user
+# Deploy and application runtime users
 # -----------------------------------------------------------------------------
 - name: Create deploy group
   group:
     name: "{{ deploy_group }}"
     state: present
 
+- name: Create shared application group
+  group:
+    name: "{{ projects_group }}"
+    system: true
+    state: present
+
+- name: Create shared application runtime user
+  user:
+    name: "{{ projects_user }}"
+    group: "{{ projects_group }}"
+    home: "{{ projects_home }}"
+    shell: /usr/sbin/nologin
+    create_home: true
+    system: true
+    state: present
+
 - name: Create deploy user
   user:
     name: "{{ deploy_user }}"
     group: "{{ deploy_group }}"
+    groups: "{{ projects_group }}"
+    append: true
     shell: /bin/bash
     create_home: true
     state: present
+
+- name: Ensure shared application projects root exists
+  file:
+    path: "{{ projects_root }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ projects_group }}"
+    mode: "2755"
 
 - name: Add SSH authorized key for deploy user
   authorized_key:
@@ -65,7 +91,13 @@
   copy:
     dest: "/etc/sudoers.d/{{ deploy_user }}"
     content: |
-      {{ deploy_user }} ALL=(ALL) NOPASSWD: /usr/sbin/service php{{ php_version }}-fpm reload, /usr/bin/supervisorctl *
+      Cmnd_Alias PHP_FPM_CONTROL = /usr/bin/systemctl reload php{{ php_version }}-fpm, \
+          /usr/bin/systemctl restart php{{ php_version }}-fpm, \
+          /usr/sbin/service php{{ php_version }}-fpm reload, \
+          /usr/sbin/service php{{ php_version }}-fpm restart, \
+          /usr/local/bin/cachetool opcache\:reset --fcgi\=/run/php/php{{ php_version }}-fpm.sock
+      {{ deploy_user }} ALL=(root) NOPASSWD: PHP_FPM_CONTROL
+      {{ deploy_user }} ALL=(root) NOPASSWD: /usr/bin/supervisorctl *
     mode: "0440"
     validate: "visudo -cf %s"
 

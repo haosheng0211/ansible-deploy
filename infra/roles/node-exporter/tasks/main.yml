@@ -27,6 +27,7 @@
   get_url:
     url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
     dest: /tmp/node_exporter.tar.gz
+    checksum: "sha256:https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/sha256sums.txt"
   when: not node_exporter_bin.stat.exists
 
 - name: Extract Node Exporter

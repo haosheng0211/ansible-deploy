@@ -31,7 +31,7 @@ infra/
     ├── redis          # Redis (bind 127.0.0.1)
     ├── supervisor     # 行程管理
     ├── node-exporter  # Prometheus :9100
-    └── promtail       # Loki log shipper (預設關閉)
+    └── alloy          # Grafana Alloy Loki log shipper (預設關閉)
 ```
 
 ---
@@ -104,7 +104,7 @@ chmod 644 ~/.ssh/id_ed25519.pub
 
 | 變數 | 說明 |
 |---|---|
-| `mariadb_root_password` | **務必改掉**，不要用預設的 `CHANGE_ME_root` |
+| `mariadb_root_password` | **務必改掉**，不要用預設的 `CHANGE_ME` |
 | `ssh_allowed_ips` | SSH 來源白名單；留空 = 開放所有 IP（不推薦） |
 | `monitoring_allowed_ips` | 允許抓 Node Exporter `:9100` 的內網 IP |
 | `php_version` / `nodejs_major_version` / `mariadb_version` | 依專案需求 |
@@ -177,20 +177,22 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags common
 
 ---
 
-## Promtail（可選）
+## Grafana Alloy（可選）
 
 要把 log 集中到 Loki，編輯 `group_vars/production.yml`：
 
 ```yaml
-promtail_enabled: true
+alloy_enabled: true
 loki_push_url: "http://10.0.0.x:3100/loki/api/v1/push"
 ```
 
 再跑：
 
 ```bash
-ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags promtail
+ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags alloy
 ```
+
+此 role 使用 Grafana Alloy；Promtail 已停止維護，不再安裝。
 
 ---
 
@@ -198,17 +200,35 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags promta
 
 | 項目 | 內容 |
 |---|---|
-| 使用者 | `root`、`deploy`（部署用，可免密 reload php-fpm / supervisorctl） |
+| 使用者 | `root`、`deploy`（SSH／部署，可刷新 OPcache 及 reload/restart PHP-FPM）、`app`（應用程式 runtime，不可登入） |
 | 防火牆 | UFW 啟用，只開 22/80/443/9100 |
 | SSH | 加固後僅允許金鑰登入 |
 | Nginx | 已裝，預設站點已移除（等專案 role 加 site） |
 | PHP | `php8.2-fpm` 已起，Composer 在 `/usr/local/bin/composer`，cachetool 在 `/usr/local/bin/cachetool` |
 | Node.js | `node`、`npm` 已裝 |
-| MariaDB | 已裝、root 密碼已設、移除匿名/test/遠端 root |
-| Redis | bind 127.0.0.1，maxmemory 256mb、LRU |
+| MariaDB | 已裝、root 密碼已設、移除匿名/test/遠端 root；啟用 crash-durable commit 設定 |
+| Redis | bind 127.0.0.1，maxmemory 512mb、LRU |
 | Supervisor | 已起 |
 | Node Exporter | `:9100`（僅允許白名單 IP） |
 | 自動更新 | unattended-upgrades 已啟用 |
+
+---
+
+## 應用程式目錄權限
+
+基礎 role 會建立 `/var/www`，由 `deploy:app` 擁有並設為 `2755`。`deploy` 負責部署，`app` 負責 PHP-FPM 與應用程式 runtime；setgid 會讓新建專案繼承 `app` 群組。
+
+各專案部署 role 應另外設定 Laravel 專案內部權限：
+
+```text
+/var/www/<project>                 deploy:app  2751
+/var/www/<project>/.env            deploy:app  0640
+/var/www/<project>/public          deploy:app  0755
+/var/www/<project>/storage         app:app     2770
+/var/www/<project>/bootstrap/cache app:app     2770
+```
+
+一般程式碼目錄使用 `0750`、檔案使用 `0640`；`public` 內的目錄使用 `0755`、靜態檔案使用 `0644`。專案根目錄的 `2751` 只讓 Nginx 穿越到 `public`，不讓它列出或讀取其他目錄。不要對 `/var/www` 執行遞迴 `chmod 777` 或 `chown`。Nginx site 的 root 應指向 `/var/www/<project>/public`。
 
 ---
 
@@ -238,6 +258,8 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags promta
   ansible-vault encrypt_string 'YourStrongPassword' --name 'mariadb_root_password'
   ```
   執行時加 `--ask-vault-pass`。
+
+- `mariadb_innodb_flush_log_at_trx_commit=1` 與 `mariadb_sync_binlog=1` 優先保證交易在主機異常重啟後的持久性，可能增加寫入 I/O。
 - `ssh_allowed_ips` 與 `monitoring_allowed_ips` 在正式環境**一定要設**，不要全開。
 - 第一次跑完、驗證 `deploy` 能登入後，盡快開 `ssh_hardening_enabled: true` 再跑一次。
 - 跑完建議把 `/root/ansible-deploy` 刪掉或搬走，避免明碼變數留在機器上：

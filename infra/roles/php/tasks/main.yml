@@ -27,6 +27,29 @@
       - "php{{ php_version }}-opcache"
     state: present
 
+- name: Ensure PHP-FPM error log exists
+  file:
+    path: "/var/log/php{{ php_version }}-fpm-error.log"
+    state: touch
+    owner: "{{ projects_user }}"
+    group: adm
+    mode: "0640"
+    access_time: preserve
+    modification_time: preserve
+
+- name: Configure PHP-FPM error log rotation
+  template:
+    src: php-fpm-error-logrotate.j2
+    dest: "/etc/logrotate.d/php{{ php_version }}-fpm-error"
+    mode: "0644"
+
+- name: Deploy PHP-FPM production php.ini
+  template:
+    src: php.ini.j2
+    dest: "/etc/php/{{ php_version }}/fpm/php.ini"
+    mode: "0644"
+  notify: restart php-fpm
+
 - name: Deploy PHP-FPM pool config
   template:
     src: php-fpm-pool.conf.j2
@@ -62,6 +85,20 @@
     mode: "0755"
   when: not composer_bin.stat.exists
 
+- name: Download Composer installer signature
+  get_url:
+    url: https://composer.github.io/installer.sig
+    dest: /tmp/composer-setup.sig
+    mode: "0644"
+  when: not composer_bin.stat.exists
+
+- name: Verify Composer installer signature
+  command: >-
+    php -r "if (hash_file('sha384', '/tmp/composer-setup.php') !==
+    trim(file_get_contents('/tmp/composer-setup.sig'))) { exit(1); }"
+  changed_when: false
+  when: not composer_bin.stat.exists
+
 - name: Install Composer
   command: php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
   when: not composer_bin.stat.exists
@@ -69,6 +106,12 @@
 - name: Remove Composer installer
   file:
     path: /tmp/composer-setup.php
+    state: absent
+  when: not composer_bin.stat.exists
+
+- name: Remove Composer installer signature
+  file:
+    path: /tmp/composer-setup.sig
     state: absent
   when: not composer_bin.stat.exists
 

@@ -1,0 +1,10 @@
+/var/log/php{{ php_version }}-fpm-error.log {
+    daily
+    size 50M
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

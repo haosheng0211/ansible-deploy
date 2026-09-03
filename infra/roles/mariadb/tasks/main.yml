@@ -3,14 +3,25 @@
 # mariadb — Install + secure (DB/user creation is in project role)
 # =============================================================================
 
-- name: Add MariaDB signing key
-  apt_key:
-    url: "https://mariadb.org/mariadb_release_signing_key.pgp"
-    state: present
+- name: Ensure APT keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download MariaDB repository signing key
+  ansible.builtin.get_url:
+    url: https://supplychain.mariadb.com/MariaDB-Server-GPG-KEY
+    dest: /etc/apt/keyrings/mariadb.asc
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Add MariaDB {{ mariadb_version }} repository
-  apt_repository:
-    repo: "deb https://mirror.mariadb.org/repo/{{ mariadb_version }}/ubuntu {{ ansible_distribution_release }} main"
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/mariadb.asc] https://mirror.mariadb.org/repo/{{ mariadb_version }}/ubuntu {{ ansible_distribution_release }} main"
     state: present
     update_cache: true
 

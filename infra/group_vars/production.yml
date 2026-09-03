@@ -6,6 +6,10 @@
 deploy_user: deploy
 deploy_group: deploy
 deploy_ssh_public_key: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
+projects_user: app
+projects_group: app
+projects_home: /var/lib/app
+projects_root: /var/www
 timezone: Asia/Taipei
 
 # SSH hardening — 先用 deploy 用戶測試能登入後再改為 true
@@ -22,24 +26,30 @@ monitoring_allowed_ips: []
 # PHP
 php_version: "8.2"
 cachetool_version: "9.0.0"    # CLI 清除 FPM OPcache（gordalina/cachetool）
+php_upload_max_filesize: 20M   # 單一上傳檔案上限
+php_post_max_size: 25M         # multipart request 上限，保留表單額外資料空間
 
 # MariaDB
 mariadb_version: "10.11"
-mariadb_root_password: "CHANGE_ME_root"
-mariadb_innodb_buffer_pool_size: 256M    # 2C4G 機器建議 256M，4C8G 可調到 1G
+mariadb_root_password: "CHANGE_ME"
+mariadb_innodb_buffer_pool_size: 1G      # 4C8G 與 PHP/Redis/Node 共用主機的保守基線
 mariadb_max_connections: 100
 
 # Node.js
 nodejs_major_version: "22"
 
 # Redis
-redis_maxmemory: 256mb
+redis_maxmemory: 512mb    # 4C8G 共用主機的保守快取基線
 redis_maxmemory_policy: allkeys-lru
 
 # Node Exporter
 node_exporter_version: "1.8.2"
 
-# Promtail + Loki (設為 false 可跳過安裝)
-promtail_enabled: false
-promtail_version: "3.1.0"
+# Grafana Alloy + Loki (設為 false 可跳過安裝)
+alloy_enabled: false
 loki_push_url: ""   # 填入共用 ECS 的 Loki 地址，例如 http://10.0.0.x:3100/loki/api/v1/push
+
+# MariaDB durability
+# 1 + sync_binlog=1 provides the strongest crash-durability guarantee.
+mariadb_innodb_flush_log_at_trx_commit: 1
+mariadb_sync_binlog: 1

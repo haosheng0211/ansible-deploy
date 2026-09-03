@@ -3,6 +3,9 @@ bantime  = 3600
 findtime = 600
 maxretry = 5
 banaction = ufw
+bantime.increment = true
+bantime.factor = 2
+bantime.maxtime = 1w
 
 [sshd]
 enabled  = true
@@ -15,17 +18,27 @@ maxretry = 3
 enabled  = true
 port     = http,https
 filter   = nginx-http-auth
-logpath  = /var/log/nginx/*-error.log
+logpath  = /var/log/nginx/{error.log,*-error.log}
 
 [nginx-botsearch]
 enabled  = true
 port     = http,https
 filter   = nginx-botsearch
-logpath  = /var/log/nginx/*-access.log
+logpath  = /var/log/nginx/{access.log,*-access.log}
 maxretry = 2
 
 [nginx-limit-req]
 enabled  = true
 port     = http,https
 filter   = nginx-limit-req
-logpath  = /var/log/nginx/*-error.log
+logpath  = /var/log/nginx/{error.log,*-error.log}
+
+[recidive]
+enabled  = true
+filter   = recidive
+logpath  = /var/log/fail2ban.log
+port     = all
+protocol = all
+bantime  = 1w
+findtime = 1d
+maxretry = 3
