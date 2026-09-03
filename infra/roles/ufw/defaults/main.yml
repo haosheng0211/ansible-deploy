@@ -1,0 +1,3 @@
+---
+# Disable this when the provider firewall/security group owns ingress rules.
+ufw_enabled: true

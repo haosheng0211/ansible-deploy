@@ -22,7 +22,7 @@ infra/
 │   └── setup-server.yml        # 一鍵建置入口
 └── roles/
     ├── common         # 系統更新、deploy user、SSH 加固、sysctl
-    ├── ufw            # 防火牆 (22/80/443/9100)
+    ├── ufw            # 防火牆 (22/80/443/9100，可關閉)
     ├── fail2ban       # SSH 暴力破解防護
     ├── nginx          # Nginx + 優化過的 nginx.conf
     ├── php            # PHP-FPM 8.2 + 常用擴充 + Composer + cachetool
@@ -105,6 +105,7 @@ chmod 644 ~/.ssh/id_ed25519.pub
 | 變數 | 說明 |
 |---|---|
 | `mariadb_root_password` | **務必改掉**，不要用預設的 `CHANGE_ME` |
+| `ufw_enabled` | 預設 `true`；若連入規則由阿里雲安全組等雲端防火牆管理，設為 `false` |
 | `ssh_allowed_ips` | SSH 來源白名單；留空 = 開放所有 IP（不推薦） |
 | `monitoring_allowed_ips` | 允許抓 Node Exporter `:9100` 的內網 IP |
 | `php_version` / `nodejs_major_version` / `mariadb_version` | 依專案需求 |
@@ -115,6 +116,14 @@ chmod 644 ~/.ssh/id_ed25519.pub
 ```yaml
 ssh_hardening_enabled: false   # 第一次建置請保持 false
 ```
+
+若目標主機使用阿里雲安全組或其他雲端防火牆，可在同一個檔案加上：
+
+```yaml
+ufw_enabled: false
+```
+
+這會略過 UFW 的安裝、規則與啟用；Fail2ban 仍會運作，並使用 Ubuntu 套件的預設封鎖後端。請先在雲端防火牆放行必要的 `22`、`80`、`443` 與監控來源到 `9100`。
 
 ### Step 6. 執行建置
 
@@ -201,7 +210,7 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags alloy
 | 項目 | 內容 |
 |---|---|
 | 使用者 | `root`、`deploy`（SSH／部署，可刷新 OPcache 及 reload/restart PHP-FPM）、`app`（應用程式 runtime，不可登入） |
-| 防火牆 | UFW 啟用，只開 22/80/443/9100 |
+| 防火牆 | 預設啟用 UFW，只開 22/80/443/9100；可改由雲端防火牆管理 |
 | SSH | 加固後僅允許金鑰登入 |
 | Nginx | 已裝，預設站點已移除（等專案 role 加 site） |
 | PHP | `php8.2-fpm` 已起，Composer 在 `/usr/local/bin/composer`，cachetool 在 `/usr/local/bin/cachetool` |

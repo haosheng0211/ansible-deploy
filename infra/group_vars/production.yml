@@ -15,11 +15,14 @@ timezone: Asia/Taipei
 # SSH hardening — 先用 deploy 用戶測試能登入後再改為 true
 ssh_hardening_enabled: false
 
-# Firewall — SSH allowed IPs (leave empty to allow all)
+# Firewall — 設為 false 時略過 UFW，改由雲端防火牆／安全群組管理連入規則
+# ufw_enabled: true
+
+# UFW — SSH allowed IPs (leave empty to allow all)
 ssh_allowed_ips: []
 #  - 1.2.3.4
 
-# Firewall — Allow Prometheus to scrape Node Exporter :9100
+# UFW — Allow Prometheus to scrape Node Exporter :9100
 monitoring_allowed_ips: []
 #  - 10.0.0.x    # 共用 ECS 內網 IP
 

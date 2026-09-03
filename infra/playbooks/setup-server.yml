@@ -35,7 +35,8 @@
 
   roles:
     - common
-    - ufw
+    - role: ufw
+      when: ufw_enabled | default(true) | bool
     - fail2ban
     - nginx
     - php
