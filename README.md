@@ -152,6 +152,8 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini -vvv
 
 > 💡 想偷懶不打 `-i inventory/local.ini`，可以把 `ansible.cfg` 第 2 行改成 `inventory = inventory/local.ini`。
 
+PHP role 會使用 Launchpad 公開的 signing key fingerprint 驗證金鑰，並直接設定 ondrej/php 的 repository URL；不依賴 `ppa:` shorthand 的 Launchpad API metadata 查詢。
+
 ### Step 7. 驗證 deploy 使用者能從外面登入
 
 回到你**自己電腦**：

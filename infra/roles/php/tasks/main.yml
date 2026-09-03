@@ -3,9 +3,43 @@
 # php — PHP-FPM {{ php_version }}
 # =============================================================================
 
+- name: Ensure APT keyring directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download ondrej/php PPA signing key
+  get_url:
+    url: >-
+      https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xB8DC7E53946656EFBCE4C1DD71DAEAAB4AD4CAB6
+    dest: /etc/apt/keyrings/ondrej-php.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Verify ondrej/php PPA signing key fingerprint
+  command:
+    argv:
+      - gpg
+      - --show-keys
+      - --with-colons
+      - /etc/apt/keyrings/ondrej-php.asc
+  register: ondrej_php_signing_key
+  changed_when: false
+  failed_when: >-
+    'fpr:::::::::B8DC7E53946656EFBCE4C1DD71DAEAAB4AD4CAB6:'
+    not in ondrej_php_signing_key.stdout
+
 - name: Add ondrej/php PPA
   apt_repository:
-    repo: "ppa:ondrej/php"
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/ondrej-php.asc]
+      https://ppa.launchpadcontent.net/ondrej/php/ubuntu
+      {{ ansible_distribution_release }} main
+    filename: ondrej-php
     state: present
     update_cache: true
 
