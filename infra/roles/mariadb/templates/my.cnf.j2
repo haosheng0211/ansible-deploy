@@ -1,3 +1,3 @@
 [client]
 user = root
-password = {{ mariadb_root_password }}
+password = {{ mariadb_root_password | ansible.builtin.to_json(ensure_ascii=False) }}

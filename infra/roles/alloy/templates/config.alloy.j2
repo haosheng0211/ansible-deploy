@@ -9,7 +9,7 @@ loki.source.file "nginx_access" {
     __path__ = "/var/log/nginx/{access.log,*-access.log}"
     job      = "nginx"
     type     = "access"
-    host     = "{{ ansible_hostname }}"
+    host     = "{{ ansible_facts['hostname'] }}"
   }]
   forward_to = [loki.write.default.receiver]
   file_match {
@@ -22,7 +22,7 @@ loki.source.file "nginx_error" {
     __path__ = "/var/log/nginx/{error.log,*-error.log}"
     job      = "nginx"
     type     = "error"
-    host     = "{{ ansible_hostname }}"
+    host     = "{{ ansible_facts['hostname'] }}"
   }]
   forward_to = [loki.write.default.receiver]
   file_match {
@@ -34,7 +34,7 @@ loki.source.file "laravel" {
   targets = [{
     __path__ = "/var/www/*/storage/logs/*.log"
     job      = "laravel"
-    host     = "{{ ansible_hostname }}"
+    host     = "{{ ansible_facts['hostname'] }}"
   }]
   forward_to = [loki.write.default.receiver]
   file_match {
@@ -47,7 +47,7 @@ loki.source.file "mariadb_slow" {
     __path__ = "/var/log/mysql/slow.log"
     job      = "mariadb"
     type     = "slow"
-    host     = "{{ ansible_hostname }}"
+    host     = "{{ ansible_facts['hostname'] }}"
   }]
   forward_to = [loki.write.default.receiver]
   file_match {
@@ -60,7 +60,7 @@ loki.source.file "php_fpm_slow" {
     __path__ = "/var/log/php{{ php_version }}-fpm-slow.log"
     job      = "php-fpm"
     type     = "slow"
-    host     = "{{ ansible_hostname }}"
+    host     = "{{ ansible_facts['hostname'] }}"
   }]
   forward_to = [loki.write.default.receiver]
   file_match {
@@ -70,9 +70,9 @@ loki.source.file "php_fpm_slow" {
 
 loki.source.file "system" {
   targets = [
-    { __path__ = "/var/log/fail2ban.log", job = "fail2ban", host = "{{ ansible_hostname }}" },
-    { __path__ = "/var/log/auth.log", job = "auth", host = "{{ ansible_hostname }}" },
-    { __path__ = "/var/log/syslog", job = "syslog", host = "{{ ansible_hostname }}" },
+    { __path__ = "/var/log/fail2ban.log", job = "fail2ban", host = "{{ ansible_facts['hostname'] }}" },
+    { __path__ = "/var/log/auth.log", job = "auth", host = "{{ ansible_facts['hostname'] }}" },
+    { __path__ = "/var/log/syslog", job = "syslog", host = "{{ ansible_facts['hostname'] }}" },
   ]
   forward_to = [loki.write.default.receiver]
   file_match {

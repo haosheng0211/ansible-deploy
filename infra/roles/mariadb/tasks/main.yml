@@ -39,7 +39,7 @@
     name: mariadb
     types: deb
     uris: "https://mirror.mariadb.org/repo/{{ mariadb_version }}/ubuntu"
-    suites: "{{ ansible_distribution_release }}"
+    suites: "{{ ansible_facts['distribution_release'] }}"
     components: main
     signed_by: /etc/apt/keyrings/mariadb.asc
     state: present
@@ -55,7 +55,7 @@
     name:
       - mariadb-server
       - mariadb-client
-      - python3-mysqldb
+      - python3-pymysql
     state: present
 
 - name: Ensure MariaDB is running
@@ -68,12 +68,17 @@
 # Security hardening (equivalent to mysql_secure_installation)
 # -----------------------------------------------------------------------------
 - name: Set MariaDB root password
-  ansible.mysql.mysql_user:
+  ansible.mariadb.mariadb_user:
     name: root
     host: localhost
     password: "{{ mariadb_root_password }}"
+    check_implicit_admin: true
+    config_file: ""
+    login_user: root
+    login_password: "{{ mariadb_root_password }}"
     login_unix_socket: /run/mysqld/mysqld.sock
     state: present
+  no_log: true
 
 - name: Deploy MariaDB root credentials file
   template:
@@ -82,24 +87,37 @@
     owner: root
     group: root
     mode: "0600"
+  no_log: true
 
 - name: Remove anonymous users
-  ansible.mysql.mysql_user:
+  ansible.mariadb.mariadb_user:
     name: ""
     host_all: true
     state: absent
+    config_file: ""
+    login_user: root
+    login_password: "{{ mariadb_root_password }}"
     login_unix_socket: /run/mysqld/mysqld.sock
+  no_log: true
 
 - name: Remove remote root access
-  ansible.mysql.mysql_query:
+  ansible.mariadb.mariadb_query:
     query: "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')"
+    config_file: ""
+    login_user: root
+    login_password: "{{ mariadb_root_password }}"
     login_unix_socket: /run/mysqld/mysqld.sock
+  no_log: true
 
 - name: Remove test database
-  ansible.mysql.mysql_db:
+  ansible.mariadb.mariadb_db:
     name: test
     state: absent
+    config_file: ""
+    login_user: root
+    login_password: "{{ mariadb_root_password }}"
     login_unix_socket: /run/mysqld/mysqld.sock
+  no_log: true
 
 # -----------------------------------------------------------------------------
 # Server config
