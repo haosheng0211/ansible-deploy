@@ -33,15 +33,36 @@
     'fpr:::::::::B8DC7E53946656EFBCE4C1DD71DAEAAB4AD4CAB6:'
     not in ondrej_php_signing_key.stdout
 
+- name: Find legacy ondrej/php APT list files
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns: "*.list"
+    contains: '^\s*deb .*https?://ppa\.launchpad(content)?\.net/ondrej/php/ubuntu'
+  register: ondrej_php_legacy_lists
+
+- name: Remove legacy ondrej/php APT entries
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: '^\s*deb .*https?://ppa\.launchpad(content)?\.net/ondrej/php/ubuntu.*$'
+    state: absent
+  loop: "{{ ondrej_php_legacy_lists.files }}"
+  register: ondrej_php_legacy_removed
+
 - name: Add ondrej/php PPA
-  apt_repository:
-    repo: >-
-      deb [signed-by=/etc/apt/keyrings/ondrej-php.asc]
-      https://ppa.launchpadcontent.net/ondrej/php/ubuntu
-      {{ ansible_distribution_release }} main
-    filename: ondrej-php
+  ansible.builtin.deb822_repository:
+    name: ondrej-php
+    types: deb
+    uris: https://ppa.launchpadcontent.net/ondrej/php/ubuntu
+    suites: "{{ ansible_distribution_release }}"
+    components: main
+    signed_by: /etc/apt/keyrings/ondrej-php.asc
     state: present
+  register: ondrej_php_repository
+
+- name: Update APT cache for ondrej/php PPA
+  ansible.builtin.apt:
     update_cache: true
+  when: ondrej_php_repository.changed or ondrej_php_legacy_removed.changed
 
 - name: Install PHP {{ php_version }} and extensions
   apt:

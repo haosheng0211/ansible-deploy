@@ -25,6 +25,7 @@
       - apt-transport-https
       - ca-certificates
       - gnupg
+      - python3-debian
       - ntp
       - logrotate
     state: present

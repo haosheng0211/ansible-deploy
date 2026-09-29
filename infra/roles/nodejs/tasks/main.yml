@@ -19,11 +19,36 @@
     group: root
     mode: "0644"
 
+- name: Find legacy NodeSource APT list files
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns: "*.list"
+    contains: '^\s*deb .*https://deb\.nodesource\.com/node_'
+  register: nodesource_legacy_lists
+
+- name: Remove legacy NodeSource APT entries
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: '^\s*deb .*https://deb\.nodesource\.com/node_.*$'
+    state: absent
+  loop: "{{ nodesource_legacy_lists.files }}"
+  register: nodesource_legacy_removed
+
 - name: Add NodeSource repository
-  ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_{{ nodejs_major_version }}.x nodistro main"
+  ansible.builtin.deb822_repository:
+    name: nodesource
+    types: deb
+    uris: "https://deb.nodesource.com/node_{{ nodejs_major_version }}.x"
+    suites: nodistro
+    components: main
+    signed_by: /etc/apt/keyrings/nodesource.asc
     state: present
+  register: nodesource_repository
+
+- name: Update APT cache for NodeSource repository
+  ansible.builtin.apt:
     update_cache: true
+  when: nodesource_repository.changed or nodesource_legacy_removed.changed
 
 - name: Install Node.js
   apt:

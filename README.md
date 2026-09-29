@@ -69,10 +69,11 @@ apt install -y ansible
 確認版本：
 
 ```bash
-ansible --version    # 需要 2.14+，PPA 通常給 2.16+
+ansible --version    # 建議 ansible-core 2.16+（符合目前 ansible.mysql collection 需求）
+ansible-galaxy collection install ansible.mysql
 ```
 
-> Ubuntu 22.04 / 24.04 預設 repo 的 ansible 已經夠新（2.14 / 2.16），可以省略 PPA 那兩行直接 `apt install -y ansible git`。但加 PPA 不會出錯，當 fallback 也行。
+> `deb822_repository` 需要 ansible-core 2.15+，目前的 `ansible.mysql` collection 需要 2.16+。若發行版套件庫提供的版本符合需求，可直接使用，否則請安裝較新版本。MariaDB 任務需要 `ansible.mysql` collection；若已隨 `ansible` 套件安裝，Galaxy 指令會顯示已安裝。
 
 ### Step 3. 把這個 repo 放到機器上
 

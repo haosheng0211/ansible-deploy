@@ -19,11 +19,36 @@
     group: root
     mode: "0644"
 
+- name: Find legacy MariaDB APT list files
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns: "*.list"
+    contains: '^\s*deb .*https://mirror\.mariadb\.org/repo/'
+  register: mariadb_legacy_lists
+
+- name: Remove legacy MariaDB APT entries
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: '^\s*deb .*https://mirror\.mariadb\.org/repo/.*$'
+    state: absent
+  loop: "{{ mariadb_legacy_lists.files }}"
+  register: mariadb_legacy_removed
+
 - name: Add MariaDB {{ mariadb_version }} repository
-  ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/mariadb.asc] https://mirror.mariadb.org/repo/{{ mariadb_version }}/ubuntu {{ ansible_distribution_release }} main"
+  ansible.builtin.deb822_repository:
+    name: mariadb
+    types: deb
+    uris: "https://mirror.mariadb.org/repo/{{ mariadb_version }}/ubuntu"
+    suites: "{{ ansible_distribution_release }}"
+    components: main
+    signed_by: /etc/apt/keyrings/mariadb.asc
     state: present
+  register: mariadb_repository
+
+- name: Update APT cache for MariaDB repository
+  ansible.builtin.apt:
     update_cache: true
+  when: mariadb_repository.changed or mariadb_legacy_removed.changed
 
 - name: Install MariaDB server
   apt:
@@ -43,7 +68,7 @@
 # Security hardening (equivalent to mysql_secure_installation)
 # -----------------------------------------------------------------------------
 - name: Set MariaDB root password
-  mysql_user:
+  ansible.mysql.mysql_user:
     name: root
     host: localhost
     password: "{{ mariadb_root_password }}"
@@ -59,19 +84,19 @@
     mode: "0600"
 
 - name: Remove anonymous users
-  mysql_user:
+  ansible.mysql.mysql_user:
     name: ""
     host_all: true
     state: absent
     login_unix_socket: /run/mysqld/mysqld.sock
 
 - name: Remove remote root access
-  mysql_query:
+  ansible.mysql.mysql_query:
     query: "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')"
     login_unix_socket: /run/mysqld/mysqld.sock
 
 - name: Remove test database
-  mysql_db:
+  ansible.mysql.mysql_db:
     name: test
     state: absent
     login_unix_socket: /run/mysqld/mysqld.sock

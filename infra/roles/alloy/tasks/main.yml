@@ -27,11 +27,36 @@
     group: root
     mode: "0644"
 
+- name: Find legacy Grafana APT list files
+  ansible.builtin.find:
+    paths: /etc/apt/sources.list.d
+    patterns: "*.list"
+    contains: '^\s*deb .*https://apt\.grafana\.com'
+  register: grafana_legacy_lists
+
+- name: Remove legacy Grafana APT entries
+  ansible.builtin.lineinfile:
+    path: "{{ item.path }}"
+    regexp: '^\s*deb .*https://apt\.grafana\.com.*$'
+    state: absent
+  loop: "{{ grafana_legacy_lists.files }}"
+  register: grafana_legacy_removed
+
 - name: Add Grafana APT repository
-  ansible.builtin.apt_repository:
-    repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main"
+  ansible.builtin.deb822_repository:
+    name: grafana
+    types: deb
+    uris: https://apt.grafana.com
+    suites: stable
+    components: main
+    signed_by: /etc/apt/keyrings/grafana.asc
     state: present
+  register: grafana_repository
+
+- name: Update APT cache for Grafana repository
+  ansible.builtin.apt:
     update_cache: true
+  when: grafana_repository.changed or grafana_legacy_removed.changed
 
 - name: Install Grafana Alloy
   ansible.builtin.apt:
