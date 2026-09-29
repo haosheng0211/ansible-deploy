@@ -87,9 +87,9 @@ cd ansible-deploy/infra
 
 ### Step 4. 放好你的 SSH 公鑰
 
-playbook 的 `common` role 會把 **目標機上** `~/.ssh/id_ed25519.pub` 寫入 `deploy` 使用者的 `authorized_keys`，讓你之後可以用 `deploy` user SSH 進來。
+預設設定會讓 playbook 的 `common` role 把 **目標機上** `~/.ssh/id_ed25519.pub` 寫入 `deploy` 使用者的 `authorized_keys`；使用下方腳本時，腳本會把選定的公鑰直接寫入變數。
 
-所以**執行前**，請把你個人電腦的公鑰放到目標機的 `/root/.ssh/id_ed25519.pub`：
+可以把你個人電腦的公鑰放到目標機的 `/root/.ssh/id_ed25519.pub`，供下方設定腳本自動讀取；也可以在腳本提示時直接貼上，略過這一步：
 
 ```bash
 mkdir -p ~/.ssh
@@ -101,7 +101,16 @@ chmod 644 ~/.ssh/id_ed25519.pub
 
 ### Step 5. 調整全域變數
 
-編輯 `group_vars/production.yml`，**至少要改**：
+首次建置可執行互動式設定腳本，按 Enter 接受建議值。腳本會確認 SSH 公鑰、UFW、來源 IP、PHP／Node.js／MariaDB 等版本、Alloy 與 MariaDB 密碼；也會偵測本機 vCPU 和記憶體，建議 PHP-FPM、OPcache、MariaDB、Redis 的起始資源設定。可覆寫偵測值與每項建議值。密碼會用 Ansible Vault 加密，設定檔權限設為 `0600`。請妥善保存輸入的 Vault 密碼。
+
+```bash
+cd /root/ansible-deploy/infra
+bash scripts/configure-production.sh
+```
+
+這些數值是 PHP、MariaDB、Redis、Node.js 共用主機的保守起點，不是效能保證。PHP-FPM 子程序數取 `vCPU × 6` 與記憶體級距上限中的較小值；MariaDB buffer pool、Redis maxmemory、PHP memory_limit 與 OPcache 依記憶體級距建議。Node.js 只設定安裝版本；應用程式的 Node 記憶體限制需在各專案的 PM2 設定中處理。上線後應依實際 PHP-FPM RSS、資料庫工作集與 Redis 使用量調整。[PHP-FPM 參數說明](https://www.php.net/manual/en/install.fpm.configuration.php)、[MariaDB buffer pool 說明](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-buffer-pool)、[Redis maxmemory 說明](https://redis.io/docs/latest/develop/reference/eviction/)。
+
+腳本只接受尚未設定 MariaDB 密碼的預設檔；之後調整請直接編輯 `group_vars/production.yml`。若手動設定，**至少要改**：
 
 | 變數 | 說明 |
 |---|---|
@@ -111,6 +120,8 @@ chmod 644 ~/.ssh/id_ed25519.pub
 | `monitoring_allowed_ips` | 允許抓 Node Exporter `:9100` 的內網 IP |
 | `php_version` / `nodejs_major_version` / `mariadb_version` | 依專案需求 |
 | `mariadb_innodb_buffer_pool_size` | 2C4G 機器 256M，4C8G 可開到 1G |
+| `php_fpm_max_children` / `php_memory_limit` / `php_opcache_memory_consumption` | 依 vCPU、記憶體與 PHP 工作程序實際 RSS 調整 |
+| `redis_maxmemory` / `mariadb_max_connections` | 依可用記憶體與連線量調整 |
 
 **SSH 加固先別開**：
 
@@ -130,23 +141,24 @@ ufw_enabled: false
 
 ```bash
 cd /root/ansible-deploy/infra
-ansible-playbook playbooks/setup-server.yml -i inventory/local.ini
+ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --ask-vault-pass
 ```
 
 > `local.ini` 內容是 `localhost ansible_connection=local`，Ansible 不會走 SSH，直接在本機執行所有任務。
+> 若使用設定腳本產生的 Vault 密碼，往後每次執行 playbook 都要加上 `--ask-vault-pass`；若手動填寫明碼，則不需要。
 
 可選參數：
 
 ```bash
 # 先 dry-run 看會做什麼
-ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --check
+ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --check --ask-vault-pass
 
 # 只跑特定 role
-ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags nginx
-ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags mariadb
+ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags nginx --ask-vault-pass
+ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags mariadb --ask-vault-pass
 
 # 跑慢一點看詳細輸出
-ansible-playbook playbooks/setup-server.yml -i inventory/local.ini -vvv
+ansible-playbook playbooks/setup-server.yml -i inventory/local.ini -vvv --ask-vault-pass
 ```
 
 整段跑完約 5–15 分鐘（看網路與機器規格）。
@@ -174,7 +186,7 @@ vi /root/ansible-deploy/infra/group_vars/production.yml
 # 把 ssh_hardening_enabled 改為 true
 
 cd /root/ansible-deploy/infra
-ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags common
+ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags common --ask-vault-pass
 ```
 
 加固項目：
@@ -201,7 +213,7 @@ loki_push_url: "http://10.0.0.x:3100/loki/api/v1/push"
 再跑：
 
 ```bash
-ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags alloy
+ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags alloy --ask-vault-pass
 ```
 
 此 role 使用 Grafana Alloy；Promtail 已停止維護，不再安裝。
@@ -216,10 +228,10 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags alloy
 | 防火牆 | 預設啟用 UFW，只開 22/80/443/9100；可改由雲端防火牆管理 |
 | SSH | 加固後僅允許金鑰登入 |
 | Nginx | 已裝，預設站點已移除（等專案 role 加 site） |
-| PHP | `php8.2-fpm` 已起，Composer 在 `/usr/local/bin/composer`，cachetool 在 `/usr/local/bin/cachetool` |
+| PHP | 所選 PHP-FPM 版本已起，Composer 在 `/usr/local/bin/composer`，cachetool 在 `/usr/local/bin/cachetool` |
 | Node.js | `node`、`npm` 已裝 |
 | MariaDB | 已裝、root 密碼已設、移除匿名/test/遠端 root；啟用 crash-durable commit 設定 |
-| Redis | bind 127.0.0.1，maxmemory 512mb、LRU |
+| Redis | bind 127.0.0.1，maxmemory 依主機設定、LRU |
 | Supervisor | 已起 |
 | Node Exporter | `:9100`（僅允許白名單 IP） |
 | 自動更新 | unattended-upgrades 已啟用 |

@@ -31,6 +31,12 @@ php_version: "8.2"
 cachetool_version: "9.0.0"    # CLI 清除 FPM OPcache（gordalina/cachetool）
 php_upload_max_filesize: 20M   # 單一上傳檔案上限
 php_post_max_size: 25M         # multipart request 上限，保留表單額外資料空間
+php_memory_limit: 256M
+php_opcache_memory_consumption: 256
+php_fpm_max_children: 24
+php_fpm_start_servers: 4
+php_fpm_min_spare_servers: 4
+php_fpm_max_spare_servers: 8
 
 # MariaDB
 mariadb_version: "10.11"

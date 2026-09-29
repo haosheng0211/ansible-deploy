@@ -3,7 +3,7 @@
 ; 會導致每個請求都重新編譯全部程式碼（2026-07-05 曾造成正式環境 API 慢 3~5 秒的事故）。
 zend_extension=opcache.so
 opcache.enable=1
-opcache.memory_consumption=256
+opcache.memory_consumption={{ php_opcache_memory_consumption }}
 opcache.interned_strings_buffer=24
 opcache.max_accelerated_files=20000
 opcache.validate_timestamps=0
