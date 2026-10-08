@@ -38,7 +38,8 @@ php_fpm_start_servers: 4
 php_fpm_min_spare_servers: 4
 php_fpm_max_spare_servers: 8
 
-# MariaDB
+# MariaDB — Set false for RDS / external databases
+mariadb_enabled: true
 mariadb_version: "10.11"
 mariadb_root_password: "CHANGE_ME"
 mariadb_innodb_buffer_pool_size: 1G      # 4C8G 與 PHP/Redis/Node 共用主機的保守基線

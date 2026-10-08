@@ -101,20 +101,23 @@ chmod 644 ~/.ssh/id_ed25519.pub
 
 ### Step 5. 調整全域變數
 
-首次建置可執行互動式設定腳本，按 Enter 接受建議值。腳本會確認 SSH 公鑰、UFW、來源 IP、PHP／Node.js／MariaDB 等版本、Alloy 與 MariaDB 密碼；也會偵測本機 vCPU 和記憶體，建議 PHP-FPM、OPcache、MariaDB、Redis 的起始資源設定。可覆寫偵測值與每項建議值。密碼會用 Ansible Vault 加密，設定檔權限設為 `0600`。請妥善保存輸入的 Vault 密碼。
+首次建置可執行互動式設定腳本，按 Enter 接受建議值。腳本先詢問是否安裝本機 MariaDB（預設 `true`，使用 RDS／外部資料庫時選 `false`），再確認 SSH 公鑰、UFW、來源 IP、PHP／Node.js／MariaDB 等版本、Alloy 與 MariaDB 密碼；也會偵測本機 vCPU 和記憶體，建議 PHP-FPM、OPcache、MariaDB、Redis 的起始資源設定。可覆寫偵測值與每項建議值。只有啟用本機 MariaDB 時才詢問其版本、資源與 root 密碼，並用 Ansible Vault 加密；外部資料庫模式不需要 `ansible-vault`，也不產生 Vault 密碼。設定檔權限設為 `0600`。請妥善保存輸入的 Vault 密碼。
 
 ```bash
 cd /root/ansible-deploy/infra
 bash scripts/configure-production.sh
 ```
 
+外部資料庫的 endpoint、帳號、密碼與 TLS 設定由各專案管理；PHP MySQL 擴充仍會安裝。`mariadb_enabled: false` 只跳過本機資料庫建置，不會移除或停止既有 MariaDB。其他服務沿用保守的資源建議，不會自動分配省下的資料庫記憶體。
+
 這些數值是 PHP、MariaDB、Redis、Node.js 共用主機的保守起點，不是效能保證。PHP-FPM 子程序數取 `vCPU × 6` 與記憶體級距上限中的較小值；MariaDB buffer pool、Redis maxmemory、PHP memory_limit 與 OPcache 依記憶體級距建議。Node.js 只設定安裝版本；應用程式的 Node 記憶體限制需在各專案的 PM2 設定中處理。上線後應依實際 PHP-FPM RSS、資料庫工作集與 Redis 使用量調整。[PHP-FPM 參數說明](https://www.php.net/manual/en/install.fpm.configuration.php)、[MariaDB buffer pool 說明](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-buffer-pool)、[Redis maxmemory 說明](https://redis.io/docs/latest/develop/reference/eviction/)。
 
-腳本只接受尚未設定 MariaDB 密碼的預設檔；之後調整請直接編輯 `group_vars/production.yml`。若手動設定，**至少要改**：
+腳本只接受尚未設定 MariaDB 密碼、且尚未選用外部資料庫的預設檔；之後調整請直接編輯 `group_vars/production.yml`。若手動設定，**至少要改**：
 
 | 變數 | 說明 |
 |---|---|
-| `mariadb_root_password` | **務必改掉**，不要用預設的 `CHANGE_ME` |
+| `mariadb_enabled` | 預設 `true`；使用 RDS／外部資料庫設為 `false`，跳過本機 MariaDB role 與 root 密碼檢查 |
+| `mariadb_root_password` | 啟用本機 MariaDB 時**務必改掉**，不要用預設的 `CHANGE_ME` |
 | `ufw_enabled` | 預設 `true`；若連入規則由阿里雲安全組等雲端防火牆管理，設為 `false` |
 | `ssh_allowed_ips` | SSH 來源白名單；留空 = 開放所有 IP（不推薦） |
 | `monitoring_allowed_ips` | 允許抓 Node Exporter `:9100` 的內網 IP |
@@ -145,7 +148,7 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --ask-vault-p
 ```
 
 > `local.ini` 內容是 `localhost ansible_connection=local`，Ansible 不會走 SSH，直接在本機執行所有任務。
-> 若使用設定腳本產生的 Vault 密碼，往後每次執行 playbook 都要加上 `--ask-vault-pass`；若手動填寫明碼，則不需要。
+> 若使用設定腳本產生的 Vault 密碼，往後每次執行 playbook 都要加上 `--ask-vault-pass`；若手動填寫明碼，或選用外部資料庫且沒有其他 Vault 加密變數，則不需要。
 
 可選參數：
 
@@ -230,7 +233,7 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags alloy 
 | Nginx | 已裝，預設站點已移除（等專案 role 加 site） |
 | PHP | 所選 PHP-FPM 版本已起，Composer 在 `/usr/local/bin/composer`，cachetool 在 `/usr/local/bin/cachetool` |
 | Node.js | `node`、`npm` 已裝 |
-| MariaDB | 已裝、root 密碼已設、移除匿名/test/遠端 root；啟用 crash-durable commit 設定 |
+| MariaDB | 僅 `mariadb_enabled: true` 時安裝；root 密碼已設、移除匿名/test/遠端 root；啟用 crash-durable commit 設定 |
 | Redis | bind 127.0.0.1，maxmemory 依主機設定、LRU |
 | Supervisor | 已起 |
 | Node Exporter | `:9100`（僅允許白名單 IP） |

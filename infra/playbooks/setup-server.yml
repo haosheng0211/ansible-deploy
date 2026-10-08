@@ -24,6 +24,7 @@
           mariadb_root_password is still set to the default value.
           Set a unique password or provide the variable through Ansible Vault
           before running this playbook.
+      when: mariadb_enabled | default(true) | bool
 
     - name: Require a Loki endpoint when Alloy is enabled
       ansible.builtin.assert:
@@ -41,7 +42,8 @@
     - nginx
     - php
     - nodejs
-    - mariadb
+    - role: mariadb
+      when: mariadb_enabled | default(true) | bool
     - redis
     - supervisor
     - node-exporter
