@@ -54,7 +54,7 @@
     system: true
     state: present
 
-- name: Create shared application runtime user
+- name: Ensure shared application runtime user
   user:
     name: "{{ projects_user }}"
     group: "{{ projects_group }}"
@@ -63,6 +63,14 @@
     create_home: true
     system: true
     state: present
+
+- name: Ensure application runtime home exists
+  file:
+    path: "{{ projects_home }}"
+    state: directory
+    owner: "{{ projects_user }}"
+    group: "{{ projects_group }}"
+    mode: "0750"
 
 - name: Create deploy user
   user:

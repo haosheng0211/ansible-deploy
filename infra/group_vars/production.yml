@@ -6,9 +6,9 @@
 deploy_user: deploy
 deploy_group: deploy
 deploy_ssh_public_key: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
-projects_user: app
-projects_group: app
-projects_home: /var/lib/app
+projects_user: www-data
+projects_group: www-data
+projects_home: /var/lib/www-data  # Writable runtime home for PM2, separate from /var/www
 projects_root: /var/www
 timezone: Asia/Taipei
 

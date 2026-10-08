@@ -224,7 +224,7 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags alloy 
 
 | 項目 | 內容 |
 |---|---|
-| 使用者 | `root`、`deploy`（SSH／部署，可刷新 OPcache 及 reload/restart PHP-FPM）、`app`（應用程式 runtime，不可登入） |
+| 使用者 | `root`、`deploy`（SSH／部署，可刷新 OPcache 及 reload/restart PHP-FPM）、`www-data`（Nginx 與應用程式 runtime，不可登入） |
 | 防火牆 | 預設啟用 UFW，只開 22/80/443/9100；可改由雲端防火牆管理 |
 | SSH | 加固後僅允許金鑰登入 |
 | Nginx | 已裝，預設站點已移除（等專案 role 加 site） |
@@ -240,19 +240,21 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags alloy 
 
 ## 應用程式目錄權限
 
-基礎 role 會建立 `/var/www`，由 `deploy:app` 擁有並設為 `2755`。`deploy` 負責部署，`app` 負責 PHP-FPM 與應用程式 runtime；setgid 會讓新建專案繼承 `app` 群組。
+新主機預設統一使用 `www-data` 執行 Nginx、PHP-FPM 與 PM2，保留 `deploy` 負責 SSH 與部署。此設定不包含既有主機的 `app` 帳號、檔案擁有者或 PM2 服務遷移。
+
+基礎 role 會建立 `/var/www`，由 `deploy:www-data` 擁有並設為 `2755`；setgid 會讓新建專案繼承 `www-data` 群組。`www-data` 的 home 設為 `/var/lib/www-data`，由該帳號擁有並設為 `0750`，供 PM2 儲存 `.pm2` 狀態；PM2 startup 使用同一路徑。
 
 各專案部署 role 應另外設定 Laravel 專案內部權限：
 
 ```text
-/var/www/<project>                 deploy:app  2751
-/var/www/<project>/.env            deploy:app  0640
-/var/www/<project>/public          deploy:app  0755
-/var/www/<project>/storage         app:app     2770
-/var/www/<project>/bootstrap/cache app:app     2770
+/var/www/<project>                 deploy:www-data    2750
+/var/www/<project>/.env            deploy:www-data    0640
+/var/www/<project>/public          deploy:www-data    0755
+/var/www/<project>/storage         www-data:www-data  2770
+/var/www/<project>/bootstrap/cache www-data:www-data  2770
 ```
 
-一般程式碼目錄使用 `0750`、檔案使用 `0640`；`public` 內的目錄使用 `0755`、靜態檔案使用 `0644`。專案根目錄的 `2751` 只讓 Nginx 穿越到 `public`，不讓它列出或讀取其他目錄。不要對 `/var/www` 執行遞迴 `chmod 777` 或 `chown`。Nginx site 的 root 應指向 `/var/www/<project>/public`。
+一般程式碼目錄使用 `0750`、檔案使用 `0640`；`public` 內的目錄使用 `0755`、靜態檔案使用 `0644`。Nginx 與應用程式共用 `www-data`，因此也具有該帳號對程式碼、`.env` 與可寫目錄的存取權限。不要對 `/var/www` 執行遞迴 `chmod 777` 或 `chown`。Nginx site 的 root 應指向 `/var/www/<project>/public`。
 
 ---
 
