@@ -5,7 +5,7 @@
 # Installs all software, hardens the system. No project-specific config.
 #
 # Usage:
-#   ansible-playbook playbooks/setup-server.yml -i inventory/production.ini
+#   ansible-playbook playbooks/setup-server.yml
 # =============================================================================
 - name: Setup production server
   hosts: production
@@ -56,6 +56,7 @@
       tags: [php]
     - role: nodejs
       tags: [nodejs]
+      when: nodejs_enabled | default(true) | bool
     - role: mariadb
       tags: [mariadb]
       when: mariadb_enabled | default(true) | bool
@@ -65,6 +66,7 @@
       tags: [supervisor]
     - role: node-exporter
       tags: [node-exporter]
+      when: node_exporter_enabled | default(true) | bool
     - role: alloy
       tags: [alloy]
       when: alloy_enabled | default(false) | bool

@@ -1,5 +1,6 @@
 ---
-- name: restart sshd
+# Ubuntu names the OpenSSH unit "ssh"; "sshd" is only an alias on some releases.
+- name: restart ssh
   systemd:
-    name: sshd
+    name: ssh
     state: restarted

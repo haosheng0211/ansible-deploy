@@ -1,0 +1,10 @@
+---
+# combined: nginx default text format. json: one object per line for log collectors (SLS, Loki).
+nginx_access_log_format: combined
+
+# Restore the client IP from Cloudflare's CF-Connecting-IP for every site on this host.
+# Only enable when all public sites sit behind the Cloudflare proxy (orange cloud).
+nginx_cloudflare_realip_enabled: false
+
+# fastcgi_read_timeout for the PHP snippet; keep it in line with PHP max_execution_time.
+nginx_fastcgi_read_timeout: 60s

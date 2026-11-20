@@ -53,7 +53,9 @@
     proto: tcp
     from_ip: "{{ item }}"
   loop: "{{ monitoring_allowed_ips | default([]) }}"
-  when: monitoring_allowed_ips is defined and monitoring_allowed_ips | length > 0
+  when:
+    - node_exporter_enabled | default(true) | bool
+    - monitoring_allowed_ips is defined and monitoring_allowed_ips | length > 0
 
 - name: Enable UFW
   ufw:

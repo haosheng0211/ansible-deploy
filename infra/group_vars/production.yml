@@ -10,7 +10,7 @@ projects_user: www-data
 projects_group: www-data
 projects_home: /var/lib/www-data  # Writable runtime home for PM2, separate from /var/www
 projects_root: /var/www
-timezone: Asia/Taipei
+timezone: Asia/Taipei  # 專案資料庫用 UTC 時，主機也設 UTC，log 時間才一致
 
 # SSH hardening — 先用 deploy 用戶測試能登入後再改為 true
 ssh_hardening_enabled: false
@@ -25,6 +25,10 @@ ssh_allowed_ips: []
 # UFW — Allow Prometheus to scrape Node Exporter :9100
 monitoring_allowed_ips: []
 #  - 10.0.0.x    # 共用 ECS 內網 IP
+
+# Nginx
+nginx_access_log_format: combined          # json：一行一筆，給 SLS／Loki 等 log 收集器
+nginx_cloudflare_realip_enabled: false     # 所有站台都走 Cloudflare 代理時開啟，還原用戶端真實 IP
 
 # PHP
 php_version: "8.2"
@@ -45,14 +49,18 @@ mariadb_root_password: "CHANGE_ME"
 mariadb_innodb_buffer_pool_size: 1G      # 4C8G 與 PHP/Redis/Node 共用主機的保守基線
 mariadb_max_connections: 100
 
-# Node.js
+# Node.js — 主機不跑 Node 程式（前端在別處建置）時設為 false
+nodejs_enabled: true
 nodejs_major_version: "22"
 
 # Redis
 redis_maxmemory: 512mb    # 4C8G 共用主機的保守快取基線
-redis_maxmemory_policy: allkeys-lru
+# Laravel queue、JWT 黑名單與快取共用同一個 Redis；用 LRU 會在記憶體滿時刪掉 queue job 與黑名單，
+# 因此預設滿了就拒絕寫入。只放快取的 Redis 才改回 allkeys-lru。
+redis_maxmemory_policy: noeviction
 
-# Node Exporter
+# Node Exporter — 沒有 Prometheus 來抓時設為 false；啟用時 :9100 對所有網卡開放，關閉 UFW 須由安全群組限制
+node_exporter_enabled: true
 node_exporter_version: "1.8.2"
 
 # Grafana Alloy + Loki (設為 false 可跳過安裝)

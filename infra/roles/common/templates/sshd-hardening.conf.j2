@@ -1,0 +1,10 @@
+# Managed by Ansible (common role). Loaded before other sshd_config.d files.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+PermitRootLogin {{ ssh_permit_root_login | default('prohibit-password') }}
+MaxAuthTries 3
+X11Forwarding no
+ClientAliveInterval 300
+ClientAliveCountMax 2
+AllowUsers {{ (['root', deploy_user] + (ssh_project_deploy_users | default([]))) | unique | join(' ') }}

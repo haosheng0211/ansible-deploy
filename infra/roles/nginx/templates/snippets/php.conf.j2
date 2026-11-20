@@ -1,0 +1,34 @@
+# Managed by Ansible (nginx role). Laravel/front-controller PHP site on PHP-FPM {{ php_version }}.
+# Set "root" to the project's public/ directory before including this.
+index index.php;
+charset utf-8;
+
+location / {
+    try_files $uri $uri/ /index.php?$query_string;
+}
+
+location = /favicon.ico {
+    access_log off; log_not_found off;
+}
+location = /robots.txt {
+    access_log off; log_not_found off;
+}
+
+# Only index.php runs; any other .php file under public/ returns 404
+location ~ ^/index\.php(/|$) {
+    fastcgi_pass unix:/run/php/php{{ php_version }}-fpm.sock;
+    fastcgi_split_path_info ^(.+\.php)(/.*)$;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+    fastcgi_param DOCUMENT_ROOT $realpath_root;
+    fastcgi_hide_header X-Powered-By;
+    fastcgi_read_timeout {{ nginx_fastcgi_read_timeout }};
+}
+
+location ~ \.php$ {
+    return 404;
+}
+
+location ~ /\.(?!well-known).* {
+    deny all;
+}

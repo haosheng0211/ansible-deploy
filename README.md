@@ -26,13 +26,13 @@ infra/
     ├── common         # 系統更新、deploy user、SSH 加固、sysctl
     ├── ufw            # 防火牆 (22/80/443/9100，可關閉)
     ├── fail2ban       # SSH 暴力破解防護
-    ├── nginx          # Nginx + 優化過的 nginx.conf
+    ├── nginx          # Nginx + 優化過的 nginx.conf、共用 snippets、可選 Cloudflare 真實 IP
     ├── php            # PHP-FPM 8.2 + 常用擴充 + Composer + cachetool
-    ├── nodejs         # Node.js 22 (透過 NodeSource)
+    ├── nodejs         # Node.js 22 (透過 NodeSource，可關閉)
     ├── mariadb        # MariaDB 10.11 + 安全設定
     ├── redis          # Redis (bind 127.0.0.1)
     ├── supervisor     # 行程管理
-    ├── node-exporter  # Prometheus :9100
+    ├── node-exporter  # Prometheus :9100 (可關閉)
     └── alloy          # Grafana Alloy Loki log shipper (預設關閉)
 ```
 
@@ -103,14 +103,14 @@ chmod 644 ~/.ssh/id_ed25519.pub
 
 ### Step 5. 調整全域變數
 
-首次建置可執行互動式設定腳本，按 Enter 接受建議值。腳本先詢問是否安裝本機 MariaDB（預設 `true`，使用 RDS／外部資料庫時選 `false`），再確認 SSH 公鑰、UFW、來源 IP、PHP／Node.js／MariaDB 等版本、Alloy 與 MariaDB 密碼；也會偵測本機 vCPU 和記憶體，建議 PHP-FPM、OPcache、MariaDB、Redis 的起始資源設定。可覆寫偵測值與每項建議值。只有啟用本機 MariaDB 時才詢問其版本、資源與 root 密碼，並用 Ansible Vault 加密；外部資料庫模式不需要 `ansible-vault`，也不產生 Vault 密碼。設定檔權限設為 `0600`。請妥善保存輸入的 Vault 密碼。
+首次建置可執行互動式設定腳本，按 Enter 接受建議值。腳本先詢問是否安裝本機 MariaDB（預設 `true`，使用 RDS／外部資料庫時選 `false`），再確認 SSH 公鑰、是否安裝 Node.js／Node Exporter、UFW、來源 IP、Cloudflare 真實 IP、Nginx log 格式、PHP／Node.js／MariaDB 等版本、Alloy 與 MariaDB 密碼；也會偵測本機 vCPU 和記憶體，建議 PHP-FPM、OPcache、MariaDB、Redis 的起始資源設定。可覆寫偵測值與每項建議值。只有啟用本機 MariaDB 時才詢問其版本、資源與 root 密碼，並用 Ansible Vault 加密；外部資料庫模式不需要 `ansible-vault`，也不產生 Vault 密碼。設定檔權限設為 `0600`。請妥善保存輸入的 Vault 密碼。
 
 ```bash
 cd /root/ansible-deploy/infra
 bash scripts/configure-production.sh
 ```
 
-外部資料庫的 endpoint、帳號、密碼與 TLS 設定由各專案管理；PHP MySQL 擴充仍會安裝。`mariadb_enabled: false` 只跳過本機資料庫建置，不會移除或停止既有 MariaDB。其他服務沿用保守的資源建議，不會自動分配省下的資料庫記憶體。
+外部資料庫的 endpoint、帳號、密碼與 TLS 設定由各專案管理；PHP MySQL 擴充仍會安裝。`mariadb_enabled: false` 只跳過本機資料庫建置，不會移除或停止既有 MariaDB。不裝本機 MariaDB 時，腳本會把省下的記憶體算給 PHP-FPM、Redis 與 OPcache，建議值比有資料庫時高一級。
 
 這些數值是 PHP、MariaDB、Redis、Node.js 共用主機的保守起點，不是效能保證。PHP-FPM 子程序數取 `vCPU × 6` 與記憶體級距上限中的較小值；MariaDB buffer pool、Redis maxmemory、PHP memory_limit 與 OPcache 依記憶體級距建議。Node.js 只設定安裝版本；應用程式的 Node 記憶體限制需在各專案的 PM2 設定中處理。上線後應依實際 PHP-FPM RSS、資料庫工作集與 Redis 使用量調整。[PHP-FPM 參數說明](https://www.php.net/manual/en/install.fpm.configuration.php)、[MariaDB buffer pool 說明](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-buffer-pool)、[Redis maxmemory 說明](https://redis.io/docs/latest/develop/reference/eviction/)。
 
@@ -123,6 +123,11 @@ bash scripts/configure-production.sh
 | `ufw_enabled` | 預設 `true`；若連入規則由阿里雲安全組等雲端防火牆管理，設為 `false` |
 | `ssh_allowed_ips` | SSH 來源白名單；留空 = 開放所有 IP（不推薦） |
 | `monitoring_allowed_ips` | 允許抓 Node Exporter `:9100` 的內網 IP |
+| `nodejs_enabled` | 預設 `true`；主機不跑 Node 程式（前端在別處建置）設為 `false` |
+| `node_exporter_enabled` | 預設 `true`；沒有 Prometheus 來抓設為 `false`。啟用時 `:9100` 對所有網卡開放，關閉 UFW 須由安全群組限制 |
+| `nginx_access_log_format` | 預設 `combined`；接 SLS、Loki 等收集器時設為 `json`，一行一筆 |
+| `nginx_cloudflare_realip_enabled` | 預設 `false`；所有站台都走 Cloudflare 代理時設為 `true`，見下方「Nginx」 |
+| `redis_maxmemory_policy` | 預設 `noeviction`；見下方「Redis」 |
 | `php_version` / `nodejs_major_version` / `mariadb_version` | 依專案需求 |
 | `mariadb_innodb_buffer_pool_size` | 2C4G 機器 256M，4C8G 可開到 1G |
 | `php_fpm_max_children` / `php_memory_limit` / `php_opcache_memory_consumption` | 依 vCPU、記憶體與 PHP 工作程序實際 RSS 調整 |
@@ -168,7 +173,7 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini -vvv --ask-va
 
 整段跑完約 5–15 分鐘（看網路與機器規格）。
 
-> 💡 想偷懶不打 `-i inventory/local.ini`，可以把 `ansible.cfg` 第 2 行改成 `inventory = inventory/local.ini`。
+> `ansible.cfg` 預設就是 `inventory/local.ini`，省略 `-i` 也會在本機執行。
 
 PHP role 會使用 Launchpad 公開的 signing key fingerprint 驗證金鑰，並直接設定 ondrej/php 的 repository URL；不依賴 `ppa:` shorthand 的 Launchpad API metadata 查詢。
 
@@ -194,15 +199,20 @@ cd /root/ansible-deploy/infra
 ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags common --ask-vault-pass
 ```
 
-加固項目：
+加固設定寫在 `/etc/ssh/sshd_config.d/00-hardening.conf`。sshd 採用第一個讀到的值，這個檔案排在雲端映像檔的 `50-cloud-init.conf` 與主設定檔前面，不會被它們的 `PasswordAuthentication yes`、`PermitRootLogin yes` 蓋掉。加固項目：
 - 禁用密碼登入（只允許金鑰）
+- root 只能用金鑰登入（`ssh_permit_root_login`，預設 `prohibit-password`；改用 `deploy` 加 sudo 後可設為 `no`）
 - 禁用空密碼
 - `MaxAuthTries 3`
 - 禁用 X11 forwarding
 - 5 分鐘 idle timeout
 - 放行 `root`、維運部署帳號及 `ssh_project_deploy_users` 指定的專案帳號
 
-加固完開**新的 terminal** 測一次 `ssh deploy@<ip>`，能上代表 OK，原本那條保命連線才能關。
+加固完開**新的 terminal** 測一次 `ssh deploy@<ip>`，能上代表 OK，原本那條保命連線才能關。確認實際生效的值：
+
+```bash
+sudo sshd -T | grep -Ei "passwordauthentication|permitrootlogin|maxauthtries|allowusers"
+```
 
 ---
 
@@ -250,6 +260,28 @@ ansible-playbook playbooks/update-server.yml -i inventory/local.ini --tags php-a
 - 範例沿用 `/var/www/api` 的 PHP 8.4、Queue 與 Reverb。MVC 專案將 `USE_ARTISAN` 設為 `false`，在 Deploy 區段直接加入自己的指令。沒有使用 Reverb 的 Laravel 專案直接移除 `reverb:restart`；沒有使用 CacheTool 的專案可關閉 `RESET_OPCACHE`。
 - 勾選 `RUN_SEED` 才會執行正式環境 seeder。程式碼在目標主機原地更新，部署中途失敗時，已完成的程式碼或資料庫變更仍會保留。
 
+## Nginx
+
+`nginx.conf` 只放全域設定，站台設定由各專案提供。role 會在 `/etc/nginx/snippets/` 放幾份共用片段，站台 `include` 才會生效：
+
+| Snippet | 用途 |
+|---|---|
+| `security-headers.conf` | `nosniff`、`SAMEORIGIN`、Referrer-Policy；location 有自己的 `add_header` 時要在該 location 再 include |
+| `proxy.conf` | 一般反向代理 header，支援 WebSocket |
+| `php84.conf` | Laravel 前端控制器，只允許執行 `index.php`；檔名跟著 `php_version` |
+| `nuxt-spa.conf` | Nuxt `ssr: false` 靜態輸出，`/_nuxt/` 長快取、其餘不快取 |
+| `vue-spa.conf` | Vue＋Vite 靜態輸出，`/assets/` 長快取、其餘不快取，history 模式路由回 `index.html` |
+
+`conf.d/connection-upgrade.conf` 定義 `proxy.conf` 用到的 `$connection_upgrade`。一般請求對應到空字串而不是 `close`，upstream 的 keepalive 才有作用。
+
+**Cloudflare 真實 IP**：`nginx_cloudflare_realip_enabled: true` 會產生 `conf.d/cloudflare-realip.conf`（`set_real_ip_from` 加 `CF-Connecting-IP`），每週一 04:00 由 `/etc/cron.d/cloudflare-realip` 重新抓 Cloudflare 公布的 IP 範圍；抓到的內容異常或 `nginx -t` 失敗時保留舊檔。開啟後 `$remote_addr` 與 PHP 的 `REMOTE_ADDR` 就是用戶端 IP，Laravel 不用再設 `TRUSTED_PROXIES`。關掉這個設定不會刪除已產生的檔案，需要時手動刪除。安全群組也應只對 Cloudflare 開放 80／443。
+
+## Redis
+
+`redis_maxmemory_policy` 預設 `noeviction`：記憶體滿時寫入直接報錯，不會刪資料。Laravel 的 queue、JWT 黑名單常和快取放在同一個 Redis，用 `allkeys-lru` 會在記憶體滿時刪掉排隊中的 job 與黑名單。只放快取的 Redis 才改回 `allkeys-lru`。上線後用 `redis-cli INFO memory` 觀察 `used_memory_human`。
+
+`FLUSHALL`、`KEYS`、`DEBUG` 停用；`FLUSHDB` 保留給 Laravel 的 `cache:clear`，它只清快取所在的 db。用 `redis-cli` 手動操作時預設連到 db 0，下 `FLUSHDB` 前先確認 `-n`。
+
 ## Grafana Alloy（可選）
 
 要把 log 集中到 Loki，編輯 `group_vars/production.local.yml`：
@@ -276,13 +308,13 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags alloy 
 | 使用者 | `root`、`deploy`（SSH／部署，可刷新 OPcache 及 reload/restart PHP-FPM）、`www-data`（Nginx 與應用程式 runtime，不可登入） |
 | 防火牆 | 預設啟用 UFW，只開 22/80/443/9100；可改由雲端防火牆管理 |
 | SSH | 加固後僅允許金鑰登入 |
-| Nginx | 已裝，預設站點已移除（等專案 role 加 site） |
+| Nginx | 已裝，預設站點已移除（等專案 role 加 site）；共用 snippets 在 `/etc/nginx/snippets/` |
 | PHP | 所選 PHP-FPM 版本已起，Composer 在 `/usr/local/bin/composer`，cachetool 在 `/usr/local/bin/cachetool` |
-| Node.js | `node`、`npm` 已裝 |
+| Node.js | `nodejs_enabled: true` 時安裝 `node`、`npm`、Yarn、PM2 |
 | MariaDB | 僅 `mariadb_enabled: true` 時安裝；root 密碼已設、移除匿名/test/遠端 root；啟用 crash-durable commit 設定 |
-| Redis | bind 127.0.0.1，maxmemory 依主機設定、LRU |
+| Redis | bind 127.0.0.1，maxmemory 依主機設定，滿了拒絕寫入（`noeviction`），AOF 持久化 |
 | Supervisor | 已起 |
-| Node Exporter | `:9100`（僅允許白名單 IP） |
+| Node Exporter | `node_exporter_enabled: true` 時安裝，`:9100`（UFW 僅允許白名單 IP） |
 | 自動更新 | unattended-upgrades 已啟用 |
 
 ---

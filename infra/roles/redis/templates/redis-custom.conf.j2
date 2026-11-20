@@ -15,7 +15,8 @@ auto-aof-rewrite-percentage 100
 auto-aof-rewrite-min-size 64mb
 
 # --- Security (disable dangerous commands in production) ---
-rename-command FLUSHDB ""
+# FLUSHDB stays available: Laravel's cache:clear flushes only the cache database.
+# FLUSHALL would wipe queues and every other database at once.
 rename-command FLUSHALL ""
 rename-command KEYS ""
 rename-command DEBUG ""

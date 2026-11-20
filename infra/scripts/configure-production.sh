@@ -156,11 +156,20 @@ if [[ -z "$deploy_key" || "$deploy_key" != *' '* ]]; then
     exit 1
 fi
 
+prompt_bool '安裝 Node.js（主機不跑 Node 程式請選 false）' true; nodejs_enabled="$reply"
+prompt_bool '安裝 Node Exporter（沒有 Prometheus 來抓請選 false）' true; node_exporter_enabled="$reply"
 prompt_bool '啟用 UFW' true; ufw_enabled="$reply"
 read -r -p '允許 SSH 的來源 IP／CIDR（逗號分隔，空白代表所有來源）：' ssh_ips
 ssh_list="$(yaml_ip_list "$ssh_ips")"
-read -r -p '允許抓取 Node Exporter 的 IP／CIDR（逗號分隔，可留空）：' monitoring_ips
-monitoring_list="$(yaml_ip_list "$monitoring_ips")"
+monitoring_list='[]'
+if [[ "$node_exporter_enabled" == true ]]; then
+    read -r -p '允許抓取 Node Exporter 的 IP／CIDR（逗號分隔，可留空）：' monitoring_ips
+    monitoring_list="$(yaml_ip_list "$monitoring_ips")"
+fi
+prompt_bool '站台都走 Cloudflare 代理（還原用戶端真實 IP）' false; cloudflare_realip_enabled="$reply"
+prompt_bool 'Nginx access log 用 JSON（給 SLS／Loki 等收集器）' false
+nginx_access_log_format=combined
+[[ "$reply" == true ]] && nginx_access_log_format=json
 
 detected_cpu="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || printf '4')"
 if [[ -r /proc/meminfo ]]; then
@@ -197,13 +206,31 @@ else
     php_memory_default=256M opcache_default=256
     fpm_memory_cap=$((memory_mib / 512))
 fi
+if [[ "$mariadb_enabled" == false ]]; then
+    # No local database: give its share to PHP-FPM, Redis and OPcache
+    if (( memory_mib < 4096 )); then
+        redis_memory_default=256mb fpm_memory_cap=12
+    elif (( memory_mib < 8192 )); then
+        redis_memory_default=512mb opcache_default=256 fpm_memory_cap=24
+    elif (( memory_mib < 16384 )); then
+        redis_memory_default=1gb fpm_memory_cap=32
+    else
+        redis_memory_mib=$((memory_mib / 8))
+        (( redis_memory_mib > 4096 )) && redis_memory_mib=4096
+        redis_memory_default="${redis_memory_mib}mb"
+        fpm_memory_cap=$((memory_mib / 384))
+    fi
+fi
 fpm_children_default=$((cpu_count * 6))
 (( fpm_children_default > fpm_memory_cap )) && fpm_children_default="$fpm_memory_cap"
 mariadb_connections_default=$((cpu_count * 25))
 (( mariadb_connections_default > 200 )) && mariadb_connections_default=200
 
 prompt_default 'PHP 版本' '8.2'; php_version="$reply"
-prompt_default 'Node.js 主版本' '22'; nodejs_version="$reply"
+nodejs_version='22'
+if [[ "$nodejs_enabled" == true ]]; then
+    prompt_default 'Node.js 主版本' '22'; nodejs_version="$reply"
+fi
 if [[ "$mariadb_enabled" == true ]]; then
     prompt_default 'MariaDB 版本' '10.11'; mariadb_version="$reply"
     if [[ ! "$mariadb_version" =~ ^[0-9]+\.[0-9]+$ ]]; then
@@ -211,7 +238,10 @@ if [[ "$mariadb_enabled" == true ]]; then
         exit 1
     fi
 fi
-prompt_default 'Node Exporter 版本' '1.8.2'; node_exporter_version="$reply"
+node_exporter_version='1.8.2'
+if [[ "$node_exporter_enabled" == true ]]; then
+    prompt_default 'Node Exporter 版本' '1.8.2'; node_exporter_version="$reply"
+fi
 prompt_default 'cachetool 版本' '9.0.0'; cachetool_version="$reply"
 if [[ ! "$php_version" =~ ^[0-9]+\.[0-9]+$ || ! "$nodejs_version" =~ ^[0-9]+$ || ! "$node_exporter_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ || ! "$cachetool_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     printf 'PHP 版本需為主版.次版；Node.js 需為主版整數；Node Exporter／cachetool 需為主版.次版.修訂版。\n' >&2
@@ -259,6 +289,8 @@ printf '\n設定摘要：%s vCPU／%s MiB；PHP-FPM=%s children；Redis=%s。\n'
     "$cpu_count" "$memory_mib" "$php_fpm_max_children" "$redis_maxmemory"
 printf 'UFW＝%s、SSH 來源＝%s、監控來源＝%s、Alloy＝%s、本機 MariaDB＝%s。\n' \
     "$ufw_enabled" "$ssh_list" "$monitoring_list" "$alloy_enabled" "$mariadb_enabled"
+printf 'Node.js＝%s、Node Exporter＝%s、Cloudflare 真實 IP＝%s、access log＝%s。\n' \
+    "$nodejs_enabled" "$node_exporter_enabled" "$cloudflare_realip_enabled" "$nginx_access_log_format"
 if [[ "$mariadb_enabled" == true ]]; then
     printf 'MariaDB buffer pool＝%s；最大連線數＝%s。\n' "$mariadb_buffer_pool" "$mariadb_max_connections"
     while true; do
@@ -308,6 +340,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         php_fpm_start_servers:*) printf 'php_fpm_start_servers: %s\n' "$php_fpm_start_servers" ;;
         php_fpm_min_spare_servers:*) printf 'php_fpm_min_spare_servers: %s\n' "$php_fpm_min_spare_servers" ;;
         php_fpm_max_spare_servers:*) printf 'php_fpm_max_spare_servers: %s\n' "$php_fpm_max_spare_servers" ;;
+        nodejs_enabled:*) printf 'nodejs_enabled: %s\n' "$nodejs_enabled" ;;
+        node_exporter_enabled:*) printf 'node_exporter_enabled: %s\n' "$node_exporter_enabled" ;;
+        nginx_access_log_format:*) printf 'nginx_access_log_format: %s\n' "$nginx_access_log_format" ;;
+        nginx_cloudflare_realip_enabled:*) printf 'nginx_cloudflare_realip_enabled: %s\n' "$cloudflare_realip_enabled" ;;
+        redis_maxmemory_policy:*) printf 'redis_maxmemory_policy: noeviction\n' ;;
         nodejs_major_version:*) printf 'nodejs_major_version: %s\n' "$(yaml_quote "$nodejs_version")" ;;
         node_exporter_version:*) printf 'node_exporter_version: %s\n' "$(yaml_quote "$node_exporter_version")" ;;
         mariadb_version:*) printf 'mariadb_version: %s\n' "$(yaml_quote "$mariadb_version")" ;;

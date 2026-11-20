@@ -1,0 +1,6 @@
+# Managed by Ansible (nginx role). Used by snippets/proxy.conf.
+# An empty Connection header (not "close") keeps upstream keepalive working for plain requests.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}

@@ -106,63 +106,33 @@
 
 # -----------------------------------------------------------------------------
 # SSH hardening (enable after verifying deploy user can login)
+#
+# A drop-in read before /etc/ssh/sshd_config.d/50-cloud-init.conf and the main
+# file, so cloud images that set PasswordAuthentication yes or
+# PermitRootLogin yes cannot override it (sshd keeps the first value it reads).
 # -----------------------------------------------------------------------------
-- name: Disable password authentication
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?PasswordAuthentication"
-    line: "PasswordAuthentication no"
-  notify: restart sshd
+- name: Require sshd_config to include sshd_config.d
+  command: grep -Eq '^Include /etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config
+  changed_when: false
   when: ssh_hardening_enabled | default(false)
 
-- name: Disable empty passwords
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?PermitEmptyPasswords"
-    line: "PermitEmptyPasswords no"
-  notify: restart sshd
-  when: ssh_hardening_enabled | default(false)
-
-- name: Set SSH max auth tries
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?MaxAuthTries"
-    line: "MaxAuthTries 3"
-  notify: restart sshd
-  when: ssh_hardening_enabled | default(false)
-
-- name: Disable X11 forwarding
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?X11Forwarding"
-    line: "X11Forwarding no"
-  notify: restart sshd
-  when: ssh_hardening_enabled | default(false)
-
-- name: Set SSH idle timeout (5 min)
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?ClientAliveInterval"
-    line: "ClientAliveInterval 300"
-  notify: restart sshd
-  when: ssh_hardening_enabled | default(false)
-
-- name: Set SSH idle timeout max count
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?ClientAliveCountMax"
-    line: "ClientAliveCountMax 2"
-  notify: restart sshd
-  when: ssh_hardening_enabled | default(false)
-
-- name: Allow SSH for administrators and configured project deployment accounts
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?AllowUsers"
-    line: "AllowUsers {{ (['root', deploy_user] + (ssh_project_deploy_users | default([]))) | unique | join(' ') }}"
+- name: Deploy SSH hardening drop-in
+  template:
+    src: sshd-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
     validate: "/usr/sbin/sshd -t -f %s"
-  notify: restart sshd
+  notify: restart ssh
   when: ssh_hardening_enabled | default(false)
+
+- name: Remove SSH hardening drop-in when hardening is disabled
+  file:
+    path: /etc/ssh/sshd_config.d/00-hardening.conf
+    state: absent
+  notify: restart ssh
+  when: not (ssh_hardening_enabled | default(false))
 
 # -----------------------------------------------------------------------------
 # Kernel security (sysctl)

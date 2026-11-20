@@ -17,14 +17,16 @@ http {
     tcp_nopush on;
     tcp_nodelay on;
     types_hash_max_size 2048;
+    server_names_hash_bucket_size 64;
     server_tokens off;
 
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
     # --- Keepalive ---
-    keepalive_timeout 30;
-    keepalive_requests 100;
+    # Long enough for CDN/load balancer connection reuse (e.g. Cloudflare)
+    keepalive_timeout 75;
+    keepalive_requests 1000;
 
     # --- Buffer ---
     client_body_buffer_size 16k;
@@ -55,7 +57,27 @@ http {
         image/svg+xml;
 
     # --- Logging ---
+{% if nginx_access_log_format == 'json' %}
+    # One JSON object per line for log collectors (Aliyun SLS, Loki, ...)
+    log_format json escape=json '{'
+        '"time":"$time_iso8601",'
+        '"ip":"$remote_addr",'
+        '"host":"$host",'
+        '"method":"$request_method",'
+        '"uri":"$request_uri",'
+        '"status":$status,'
+        '"bytes":$body_bytes_sent,'
+        '"request_time":$request_time,'
+        '"upstream_time":"$upstream_response_time",'
+        '"cf_ray":"$http_cf_ray",'
+        '"ua":"$http_user_agent",'
+        '"referer":"$http_referer"'
+    '}';
+
+    access_log /var/log/nginx/access.log json;
+{% else %}
     access_log /var/log/nginx/access.log;
+{% endif %}
     error_log /var/log/nginx/error.log;
 
     # --- Virtual Hosts ---

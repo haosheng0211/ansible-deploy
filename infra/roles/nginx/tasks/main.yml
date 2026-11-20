@@ -24,6 +24,66 @@
     - /etc/nginx/sites-available/default
   notify: reload nginx
 
+- name: Deploy shared http-level settings
+  template:
+    src: connection-upgrade.conf.j2
+    dest: /etc/nginx/conf.d/connection-upgrade.conf
+    mode: "0644"
+  notify: reload nginx
+
+# Reusable snippets; a site uses one only when it includes it
+- name: Ensure snippets directory exists
+  file:
+    path: /etc/nginx/snippets
+    state: directory
+    mode: "0755"
+
+- name: Deploy reusable site snippets
+  template:
+    src: "snippets/{{ item.src }}"
+    dest: "/etc/nginx/snippets/{{ item.dest }}"
+    mode: "0644"
+  loop:
+    - { src: security-headers.conf.j2, dest: security-headers.conf }
+    - { src: proxy.conf.j2, dest: proxy.conf }
+    - { src: php.conf.j2, dest: "php{{ php_version | replace('.', '') }}.conf" }
+    - { src: nuxt-spa.conf.j2, dest: nuxt-spa.conf }
+    - { src: vue-spa.conf.j2, dest: vue-spa.conf }
+  loop_control:
+    label: "{{ item.dest }}"
+  notify: reload nginx
+
+# -----------------------------------------------------------------------------
+# Cloudflare real client IP (optional)
+# Turning it off later does not remove the files; delete
+# /etc/nginx/conf.d/cloudflare-realip.conf and /etc/cron.d/cloudflare-realip by hand.
+# -----------------------------------------------------------------------------
+- name: Install Cloudflare real IP updater
+  copy:
+    src: update-cloudflare-realip.sh
+    dest: /usr/local/bin/update-cloudflare-realip.sh
+    owner: root
+    group: root
+    mode: "0755"
+  when: nginx_cloudflare_realip_enabled | bool
+
+- name: Generate Cloudflare real IP list
+  command: /usr/local/bin/update-cloudflare-realip.sh
+  args:
+    creates: /etc/nginx/conf.d/cloudflare-realip.conf
+  when: nginx_cloudflare_realip_enabled | bool
+
+- name: Refresh Cloudflare real IP list weekly
+  copy:
+    dest: /etc/cron.d/cloudflare-realip
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible (nginx role)
+      0 4 * * 1 root /usr/local/bin/update-cloudflare-realip.sh
+  when: nginx_cloudflare_realip_enabled | bool
+
 - name: Ensure Nginx is running
   systemd:
     name: nginx
