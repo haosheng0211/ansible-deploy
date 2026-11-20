@@ -1,0 +1,44 @@
+---
+- name: Update packages on an existing server
+  hosts: production
+  become: true
+  gather_facts: false
+  serial: 1
+
+  tasks:
+    - name: Refresh APT and upgrade installed packages
+      ansible.builtin.import_tasks: ../roles/common/tasks/upgrade-packages.yml
+      vars:
+        apt_cache_valid_time: 0
+      tags: [apt]
+
+    - name: Update only installed PHP branches
+      tags: [never, php]
+      block:
+        - name: Read installed APT packages
+          ansible.builtin.package_facts:
+            manager: apt
+
+        - name: Upgrade installed PHP runtimes and extensions
+          vars:
+            php_packages: >-
+              {{ ansible_facts.packages | select('match', '^php[0-9]+[.][0-9]+(-|$)') | sort }}
+          ansible.builtin.apt:
+            name: "{{ php_packages }}"
+            state: latest
+            only_upgrade: true
+            fail_on_autoremove: true
+            update_cache: true
+          when: php_packages | length > 0
+
+    - name: Include the ondrej PHP PPA in the existing daily unattended upgrades
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/52unattended-upgrades-ondrej-php
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          Unattended-Upgrade::Allowed-Origins {
+            "LP-PPA-ondrej-php:${distro_codename}";
+          };
+      tags: [never, php-auto]

@@ -17,9 +17,11 @@ infra/
 │   ├── production.ini          # (本情境用不到)
 │   └── local.ini               # localhost 本機執行 ★ 用這個
 ├── group_vars/
-│   └── production.yml          # 全域變數 (密碼、版本、白名單)
+│   ├── production.yml          # Git 追蹤的共用預設值
+│   └── production.local.yml    # 首次設定產生的主機設定，Git 忽略
 ├── playbooks/
-│   └── setup-server.yml        # 一鍵建置入口
+│   ├── setup-server.yml        # 一鍵建置入口
+│   └── update-server.yml       # 既有主機套件更新
 └── roles/
     ├── common         # 系統更新、deploy user、SSH 加固、sysctl
     ├── ufw            # 防火牆 (22/80/443/9100，可關閉)
@@ -97,7 +99,7 @@ vi ~/.ssh/id_ed25519.pub    # 貼上你本機 ~/.ssh/id_ed25519.pub 的內容
 chmod 644 ~/.ssh/id_ed25519.pub
 ```
 
-> 想用其他金鑰檔名，改 `group_vars/production.yml` 裡的 `deploy_ssh_public_key`。
+> 想用其他金鑰檔名，可在 `group_vars/production.local.yml` 設定 `deploy_ssh_public_key`。
 
 ### Step 5. 調整全域變數
 
@@ -112,7 +114,7 @@ bash scripts/configure-production.sh
 
 這些數值是 PHP、MariaDB、Redis、Node.js 共用主機的保守起點，不是效能保證。PHP-FPM 子程序數取 `vCPU × 6` 與記憶體級距上限中的較小值；MariaDB buffer pool、Redis maxmemory、PHP memory_limit 與 OPcache 依記憶體級距建議。Node.js 只設定安裝版本；應用程式的 Node 記憶體限制需在各專案的 PM2 設定中處理。上線後應依實際 PHP-FPM RSS、資料庫工作集與 Redis 使用量調整。[PHP-FPM 參數說明](https://www.php.net/manual/en/install.fpm.configuration.php)、[MariaDB buffer pool 說明](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-buffer-pool)、[Redis maxmemory 說明](https://redis.io/docs/latest/develop/reference/eviction/)。
 
-腳本只接受尚未設定 MariaDB 密碼、且尚未選用外部資料庫的預設檔；之後調整請直接編輯 `group_vars/production.yml`。若手動設定，**至少要改**：
+腳本將主機設定寫入 `group_vars/production.local.yml`。建置時會先讀取 `group_vars/production.yml` 的共用預設值，再套用本機設定。之後請直接編輯本機檔案，重跑腳本會保留現有檔案。手動建置也可以建立權限為 `0600` 的 `production.local.yml`，只填要覆寫的項目。
 
 | 變數 | 說明 |
 |---|---|
@@ -185,7 +187,7 @@ ssh deploy@<your-server-ip>
 確認 `deploy` 可登入後，**保留現在這條已登入的 SSH 連線不要關**（萬一鎖死可以救），然後在目標機上：
 
 ```bash
-vi /root/ansible-deploy/infra/group_vars/production.yml
+vi /root/ansible-deploy/infra/group_vars/production.local.yml
 # 把 ssh_hardening_enabled 改為 true
 
 cd /root/ansible-deploy/infra
@@ -198,15 +200,59 @@ ansible-playbook playbooks/setup-server.yml -i inventory/local.ini --tags common
 - `MaxAuthTries 3`
 - 禁用 X11 forwarding
 - 5 分鐘 idle timeout
-- 只允許 `root` 和 `deploy` 登入
+- 放行 `root`、維運部署帳號及 `ssh_project_deploy_users` 指定的專案帳號
 
 加固完開**新的 terminal** 測一次 `ssh deploy@<ip>`，能上代表 OK，原本那條保命連線才能關。
 
 ---
 
+## 移轉既有主機設定
+
+舊版設定腳本會直接編輯 Git 追蹤的 `infra/group_vars/production.yml`。已經跑過舊版腳本的主機，取得新版後，在 repo 根目錄執行一次：
+
+```bash
+bash infra/scripts/configure-production.sh --migrate
+```
+
+腳本將舊檔完整複製到權限為 `0600` 的 `production.local.yml`，逐位元比對成功後才把 `production.yml` 還原為 Git 版本。PHP 版本、SSH 白名單及 MariaDB Vault 密文一併保留。已有本機設定檔或舊檔有暫存變更時，腳本會停下來。本機設定檔請隨主機備份。
+
+## 更新已建置的主機
+
+維護 playbook 依主機實際安裝的套件執行，無須重跑首次設定腳本。
+
+在新版 repo 的 `infra/` 下選擇更新範圍。APT 更新可能重新啟動服務，建議在維護時段執行。
+
+```bash
+# 更新主機上已安裝的 PHP 與擴充；8.2、8.4 並存時會一起處理
+ansible-playbook playbooks/update-server.yml -i inventory/local.ini --tags php
+
+# 更新整台主機的 APT 套件，包含已設定來源的 Nginx、PHP、Node.js、Redis 等
+ansible-playbook playbooks/update-server.yml -i inventory/local.ini
+```
+
+兩種模式都使用主機已設定的套件來源和 APT 候選版本。可加 `--check` 預覽。以 PHAR、獨立執行檔或 npm 安裝的 Composer、Node Exporter、PM2 等工具需各自更新。
+
+若希望日後由主機自動更新 PHP，在已透過本專案啟用每日 `unattended-upgrades` 的主機執行一次：
+
+```bash
+ansible-playbook playbooks/update-server.yml -i inventory/local.ini --tags php-auto
+```
+
+這會把 `ondrej/php` PPA 加入允許來源，從下一次每日更新開始生效；範圍包括該 PPA 提供的一般更新。可在 `/var/log/unattended-upgrades/unattended-upgrades.log` 查看執行紀錄。
+
+---
+
+## Jenkins 專案上版
+
+將 [Jenkinsfile](examples/jenkins/Jenkinsfile) 複製到各專案根目錄，或貼入既有 Job 的 Pipeline script。每個專案直接維護這一份檔案。
+
+- 在頂部 `environment` 填入主機、SSH 憑證、目錄、分支、PHP 路徑及 FPM socket。執行 Job 的 agent 需有 Bash、SSH 及已核對的主機公鑰（`known_hosts`）。
+- 範例沿用 `/var/www/api` 的 PHP 8.4、Queue 與 Reverb。MVC 專案將 `USE_ARTISAN` 設為 `false`，在 Deploy 區段直接加入自己的指令。沒有使用 Reverb 的 Laravel 專案直接移除 `reverb:restart`；沒有使用 CacheTool 的專案可關閉 `RESET_OPCACHE`。
+- 勾選 `RUN_SEED` 才會執行正式環境 seeder。程式碼在目標主機原地更新，部署中途失敗時，已完成的程式碼或資料庫變更仍會保留。
+
 ## Grafana Alloy（可選）
 
-要把 log 集中到 Loki，編輯 `group_vars/production.yml`：
+要把 log 集中到 Loki，編輯 `group_vars/production.local.yml`：
 
 ```yaml
 alloy_enabled: true

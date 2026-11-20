@@ -3,14 +3,8 @@
 # common — Base system setup
 # =============================================================================
 
-- name: Update apt cache
-  apt:
-    update_cache: true
-    cache_valid_time: 3600
-
-- name: Upgrade all packages
-  apt:
-    upgrade: safe
+- name: Refresh APT and upgrade installed packages
+  ansible.builtin.import_tasks: upgrade-packages.yml
 
 - name: Install base packages
   apt:
@@ -161,11 +155,12 @@
   notify: restart sshd
   when: ssh_hardening_enabled | default(false)
 
-- name: Restrict SSH to deploy user only
+- name: Allow SSH for administrators and configured project deployment accounts
   lineinfile:
     path: /etc/ssh/sshd_config
     regexp: "^#?AllowUsers"
-    line: "AllowUsers root {{ deploy_user }}"
+    line: "AllowUsers {{ (['root', deploy_user] + (ssh_project_deploy_users | default([]))) | unique | join(' ') }}"
+    validate: "/usr/sbin/sshd -t -f %s"
   notify: restart sshd
   when: ssh_hardening_enabled | default(false)
 

@@ -15,6 +15,12 @@
     - ../group_vars/production.yml
 
   pre_tasks:
+    - name: Load this server's local settings
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      loop: "{{ query('ansible.builtin.fileglob', playbook_dir ~ '/../group_vars/production.local.yml') }}"
+      tags: [always]
+
     - name: Refuse the default MariaDB root password
       ansible.builtin.assert:
         that:
@@ -25,6 +31,7 @@
           Set a unique password or provide the variable through Ansible Vault
           before running this playbook.
       when: mariadb_enabled | default(true) | bool
+      tags: [mariadb]
 
     - name: Require a Loki endpoint when Alloy is enabled
       ansible.builtin.assert:
@@ -33,19 +40,31 @@
           - loki_push_url | string | length > 0
         fail_msg: Set loki_push_url before enabling Alloy.
       when: alloy_enabled | default(false) | bool
+      tags: [alloy]
 
   roles:
-    - common
+    - role: common
+      tags: [common]
     - role: ufw
+      tags: [ufw]
       when: ufw_enabled | default(true) | bool
-    - fail2ban
-    - nginx
-    - php
-    - nodejs
+    - role: fail2ban
+      tags: [fail2ban]
+    - role: nginx
+      tags: [nginx]
+    - role: php
+      tags: [php]
+    - role: nodejs
+      tags: [nodejs]
     - role: mariadb
+      tags: [mariadb]
       when: mariadb_enabled | default(true) | bool
-    - redis
-    - supervisor
-    - node-exporter
+    - role: redis
+      tags: [redis]
+    - role: supervisor
+      tags: [supervisor]
+    - role: node-exporter
+      tags: [node-exporter]
     - role: alloy
+      tags: [alloy]
       when: alloy_enabled | default(false) | bool

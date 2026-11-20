@@ -1,2 +1,4 @@
 .idea
 .DS_Store
+/infra/group_vars/production.local.yml
+/infra/group_vars/production.local.yml.tmp.*

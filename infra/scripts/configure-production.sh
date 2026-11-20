@@ -1,30 +1,64 @@
 #!/usr/bin/env bash
-# First-run setup for infra/group_vars/production.yml.
+# Generate this server's local overrides for the production playbook.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-config_file="${script_dir}/../group_vars/production.yml"
+vars_dir="${script_dir}/../group_vars"
+defaults_file="${vars_dir}/production.yml"
+config_file="${vars_dir}/production.local.yml"
 
-if [[ ! -f "$config_file" ]]; then
-    printf '找不到 %s\n' "$config_file" >&2
+if (( $# > 1 )) || [[ $# == 1 && $1 != --migrate ]]; then
+    printf '用法：%s [--migrate]\n' "$0" >&2
+    exit 1
+fi
+
+if [[ -e "$config_file" || -L "$config_file" ]]; then
+    printf '本機設定已存在，請直接編輯 %s。\n' "$config_file" >&2
+    exit 1
+fi
+if [[ ! -r "$defaults_file" ]]; then
+    printf '無法讀取 %s\n' "$defaults_file" >&2
     exit 1
 fi
 if ! command -v python3 >/dev/null 2>&1; then
     printf '請先安裝 Python 3 再執行。\n' >&2
     exit 1
 fi
+umask 077
+tmp_file="$(mktemp "${config_file}.tmp.XXXXXX")"
+trap 'rm -f "$tmp_file"' EXIT
+
+publish_config() {
+    # Atomically create the final name without replacing another run's settings.
+    python3 -c 'import os, sys; os.link(sys.argv[1], sys.argv[2])' "$tmp_file" "$config_file"
+}
+
+if [[ ${1:-} == --migrate ]]; then
+    git -C "$vars_dir" ls-files --error-unmatch -- production.yml >/dev/null
+    if ! git -C "$vars_dir" diff --cached --quiet -- production.yml; then
+        printf 'production.yml 有暫存的變更，請先確認後再移轉。\n' >&2
+        exit 1
+    fi
+    if git -C "$vars_dir" diff --quiet -- production.yml; then
+        printf 'production.yml 沒有未提交的主機設定可移轉。\n' >&2
+        exit 1
+    fi
+    cat "$defaults_file" > "$tmp_file"
+    publish_config
+    cmp -s "$defaults_file" "$config_file"
+    git -C "$vars_dir" restore --worktree -- production.yml
+    printf '主機設定已保存到 %s，共用預設檔已還原。\n' "$config_file"
+    exit 0
+fi
+
 if [[ ! -t 0 ]]; then
     printf '請在互動式終端機執行此腳本。\n' >&2
     exit 1
 fi
-if grep -Eq '^mariadb_enabled: false([[:space:]]|$)' "$config_file" || ! grep -Eq '^mariadb_root_password: "?CHANGE_ME"?$' "$config_file"; then
-    printf '設定檔已選用外部資料庫或 MariaDB 密碼已不是預設值；為避免覆蓋現有設定，請直接編輯 %s。\n' "$config_file" >&2
+if grep -Eq '^mariadb_enabled: false([[:space:]]|$)' "$defaults_file" || ! grep -Eq '^mariadb_root_password: "?CHANGE_ME"?$' "$defaults_file"; then
+    printf '偵測到舊版主機設定。請依 README「移轉既有主機設定」保留目前的值。\n' >&2
     exit 1
 fi
-
-umask 077
-tmp_file="$(mktemp "${config_file}.tmp.XXXXXX")"
-trap 'rm -f "$tmp_file"' EXIT
 
 prompt_default() {
     local label="$1" default="$2" answer
@@ -99,7 +133,7 @@ yaml_ip_list() {
     printf '[%s]' "$result"
 }
 
-printf '首次設定 production.yml；按 Enter 使用預設值。\n'
+printf '建立 production.local.yml；按 Enter 使用預設值。\n'
 prompt_bool '安裝本機 MariaDB（使用 RDS／外部資料庫請選 false）' true; mariadb_enabled="$reply"
 if [[ "$mariadb_enabled" == true ]] && ! command -v ansible-vault >/dev/null 2>&1; then
     printf '本機 MariaDB 密碼加密需要 ansible-vault，請先安裝 Ansible。\n' >&2
@@ -253,7 +287,6 @@ fi
 
 while IFS= read -r line || [[ -n "$line" ]]; do
     if [[ "$mariadb_enabled" == false && "$line" == mariadb_* && "$line" != mariadb_enabled:* ]]; then
-        printf '%s\n' "$line"
         continue
     fi
     case "$line" in
@@ -284,12 +317,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         mariadb_root_password:*) printf '%s\n' "$vault_entry" ;;
         alloy_enabled:*) printf 'alloy_enabled: %s\n' "$alloy_enabled" ;;
         loki_push_url:*) printf 'loki_push_url: %s\n' "$(yaml_quote "$loki_url")" ;;
-        *) printf '%s\n' "$line" ;;
     esac
-done < "$config_file" > "$tmp_file"
+done < "$defaults_file" > "$tmp_file"
 
-chmod 600 "$tmp_file"
-mv "$tmp_file" "$config_file"
+publish_config
 printf '已寫入 %s。\n' "$config_file"
 if [[ "$mariadb_enabled" == true ]]; then
     printf '執行 playbook 時請加上 --ask-vault-pass。\n'
